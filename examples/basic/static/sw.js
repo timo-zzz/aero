@@ -100,11 +100,15 @@ self.addEventListener('fetch', event => {
 		var url = location.origin + ctx.http.prefix;
 		if (originSplit[0] == '') {
 			const siteUrl = event.request.referrer.split(url)[1];
-			console.log(originSplit);
-			const split = `${ctx.http.prefix}https://`;
-			if (originSplit[1].startsWith(split) && originSplit[1].split(split));
 
-			url += siteUrl + originSplit[1];
+			url += siteUrl;
+
+			const split = `${ctx.http.prefix}https://`;
+			const raw = originSplit[1].split(split)[1];
+			if (originSplit[1].startsWith(split) && raw.split('/')[0].split('.').length === 1)
+				url += `/${raw}`;
+			else
+				url += originSplit[1];
 		} else {
 			url += event.request.url;
 		}
@@ -142,6 +146,7 @@ self.addEventListener('fetch', event => {
 		let text = await response.text();
 
 		if (ctx.scope && event.request.destination === 'script') {
+			console.log('Scoping...')
 			// Scope
 			text = `
 				with({
