@@ -1,26 +1,26 @@
+ctx.csp = ctx.cors['Content-Security-Policy'];
+
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js', {
         // The Service-Worker-Allowed must be set to '/'
-        scope: '/',
-        // Allow the service worker to use modules
-        type: 'module',
+        scope: ctx.http.prefix,
         // Don't cache http requests.
         updateViaCache: 'none'
-    }).then(reg => {
+    }).then(registration => {
         // Update service worker
-        reg.update();
-
-        // When the service worker is ready.
-        if ('active' in reg) {
-            // Share server data with the service worker.
-            const chan = new MessageChannel();
-            reg.active.postMessage(ctx, [chan.port2]);
-            
-            // Reload page
-            location.reload();
-        } else
-            console.log(reg.state);
+        registration.update();
     });
+    // When service worker is ready
+    navigator.serviceWorker.ready.then(registration => {
+        console.log('The service worker is active.');
+
+        const channel = new MessageChannel();
+        registration.active.postMessage(ctx, [channel.port2]);
+
+        // Reload page
+        alert('About to reload!');
+        //location.reload();
+    })
 } else {
     const firefox = false;
     

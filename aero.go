@@ -1,7 +1,6 @@
 package aero
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -44,15 +43,22 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	req := &fasthttp.Request{}
 	req.SetRequestURI(uri)
 
+	rewrite := true
 	ctx.Request.Header.VisitAll(func(k, v []byte) {
 		switch string(k) {
 		// Only delete the Service-Worker if the service worker isn't the interceptor.
-		case "Accept-Encoding", "Cache-Control", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest", "Service-Worker", "X-Forwarded-For", "X-Forwarded-Host":
+		case "Accept-Encoding", "Cache-Control", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker", "X-Forwarded-For", "X-Forwarded-Host":
 			// Do nothing, so these headers aren't added.
 		case "Host":
 			//req.Header.SetBytesKV(k, req.URI().Host())
 		case "Referer":
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
+		case "Sec-Fetch-Dest":
+			a.log.Println(string(v))
+			// Don't rewrite if the service worker is sending a navigate request
+			if string(v) == "empty" {
+				rewrite = false
+			}
 		default:
 			req.Header.SetBytesKV(k, v)
 		}
@@ -69,7 +75,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
 		switch sk {
-		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
+		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
 			delHeaders[sk] = string(v)
 		case "Location":
 			ctx.Response.Header.SetBytesKV(k, append([]byte(a.config.HTTP.Prefix), v...))
@@ -84,6 +90,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Header.Set("Cross-Origin-Resource-Policy", "same-origin")
 	// Allow service worker to be registered at the root
 	ctx.Response.Header.Set("Service-Worker-Allowed", "/")
+	// Allow the full path to be displayed on the referrer
+	ctx.Response.Header.Set("Referrer-Policy", "unsafe-url")
 
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
@@ -94,35 +102,47 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
-	case "text/html", "text/x-html":
-		script, err := ioutil.ReadFile("index.js")
-		if err != nil {
-			fmt.Print(err)
+	//a.log.Println(rewrite)
+	if rewrite {
+		a.log.Println("Rewriting")
+		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
+		case "text/html", "text/x-html":
+
+			script, err := ioutil.ReadFile("index.js")
+			if err != nil {
+				fmt.Print(err)
+			}
+
+			body = []byte(`
+				<!DOCTYPE html>
+				<html>
+					<head>
+						<meta charset=utf-8>
+
+						<!--Reset favicon-->
+						<link href=data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII= rel="icon" type="image/x-icon"/>
+					</head>
+					<body>
+						<script type=module>
+							'use strict';
+
+							const ctx = {
+								cors: ` + string(cors) + `,
+								http: {
+									prefix: '` + a.config.HTTP.Prefix + `'
+								},
+								ws: {
+									prefix: '` + a.config.WS.Prefix + `'
+								},
+								url: '` + uri + `'
+							};
+
+							` + string(script) + `
+						</script>
+					</body>
+				</html>
+			`)
 		}
-
-		body = []byte(`
-		<!DOCTYPE html>
-		<html>
-			<head>
-				<meta charset=utf-8>
-
-				<!--Reset favicon-->
-				<link href=data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII= rel="icon" type="image/x-icon"/>
-			</head>
-			<body>
-				<script>
-					const ctx = {
-						cors: ` + string(cors) + `,
-						prefix: '` + a.config.HTTP.Prefix + `',
-						url: new URL('` + uri + `')
-					};
-
-					` + string(script) + `
-				</script>
-			</body>
-		</html>
-		`)
 	}
 	ctx.SetBody(body)
 }
