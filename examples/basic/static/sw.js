@@ -6,13 +6,13 @@ self.addEventListener('install', () => self.skipWaiting());
 // Use the service worker immediately instead of after reload.
 self.addEventListener('activate', event => event.waitUntil(clients.claim()));
 
-//var ctx = {};
 var ctx = {
 	http: {
 		prefix: '/http/'
 	},
 	scope: true
 }
+
 // Set the server ctx.
 self.addEventListener('message', event => {
 	console.log(event);
@@ -85,7 +85,6 @@ self.addEventListener('fetch', event => {
 					
 					// Don't set the history.
 					addEventListener('popstate', event => event.preventDefault());
-
 				</script>
 				${text}
 			` : response.body, {
@@ -114,31 +113,6 @@ self.addEventListener('fetch', event => {
 		}
 
 		console.log(`%cSW%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-		/*
-		// CORS emulation
-		const policy = {};
-
-		const tokens = ctx.csp;
-		for (const rawToken of tokens) {
-			const token = rawToken.trim();
-
-			const parts = token.match(/\S+/g);
-			if (Array.isArray(parts)) {
-				const name = parts[0].toLowerCase();
-
-				if (name in directives || !name.endsWith('-src'))
-					continue;
-
-				// https://fetch.spec.whatwg.org/#concept-request-destination
-
-				const value = parts[1];
-				// Normalize and rewrite the value
-
-				policy[name] = value;
-			}
-		}
-		*/
 
 		// Fetch resource
 		const response = await fetch(url);
@@ -215,100 +189,6 @@ self.addEventListener('fetch', event => {
 		});
 	}());
 });
-
-	/*
-	event.respondWith(async function() {
-		console.log(event.request);
-
-		const navigate = event.request.mode === 'navigate';
-
-		console.log(`%cSW%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-		const proxyResponse = await fetch(navigate ? event.request.url : url);
-
-
-		const response = await fetch(navigate ? event.request.url : url);
-
-		let proxyResponse = response.clone();
-
-		// Copy headers as they're immuatable
-		const headers = new Headers(response.headers);
-
-
-		//var text = await response.text(); 
-
-		text = event.request.destination === 'script' 
-			? 
-				ctx.scope
-					?
-						`
-							with({
-								...this
-							}) {
-								${text}
-							}
-						`
-					:
-						text
-			: 
-				navigate 
-					? `
-						<script>
-							console.log('In site');
-
-							const ctx = {
-								http: {
-									prefix: '/http/'
-								}
-							}
-							
-							function rewriteUrl(url) {
-								return ctx.http.prefix + url;
-							}
-							
-							new MutationObserver((mutations, observer) => {	
-								for (let mutation of mutations)
-									for (let node of mutation.addedNodes) {
-										let stack = [node];
-
-										while (node = stack.pop()) {
-											if (node.href) {
-												const rewrittenUrl = rewriteUrl(node.href);
-												
-												console.log(\`%cHREF%c \${node.href} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-												node.href = rewrittenUrl	
-											} else if (node.action) {
-												const rewrittenUrl = rewriteUrl(node.action);
-
-												console.log(\`%cACTION%c \${node.action} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-												node.action = rewrittenUrl
-											}
-										}
-									}
-							}).observe(document, {
-								childList: true,
-								subtree: true
-							});
-							
-							// Update the url hash.
-							addEventListener('hashchange', event => context.url = location.hash);
-							
-							// Clear history.
-							history.replaceState({}, '');
-							
-							// Don't set the history.
-							addEventListener('popstate', event => event.preventDefault());
-						</script>
-						${text}
-					`
-					: text;
-
-		proxyResponse.text = text;
-	}());
-});
-*/
 
 /*
 Only supports chromium with the flag enable-experimental-cookie-features and a secure context

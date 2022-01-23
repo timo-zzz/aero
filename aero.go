@@ -75,23 +75,15 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
 		switch sk {
-		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
+		case "Alt-Svc", "Cache-Control", "Content-Length", "Cross-Origin-Resource-Policy":
 			delHeaders[sk] = string(v)
-		case "Location":
-			ctx.Response.Header.SetBytesKV(k, append([]byte(a.config.HTTP.Prefix), v...))
 		default:
 			ctx.Response.Header.SetBytesKV(k, v)
 		}
 	})
 
-	// Don't let any requests escape origin.
-	ctx.Response.Header.Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
-	ctx.Response.Header.Set("Cross-Origin-Embedder-Policy", "require-corp")
-	ctx.Response.Header.Set("Cross-Origin-Resource-Policy", "same-origin")
 	// Allow service worker to be registered at the root
 	ctx.Response.Header.Set("Service-Worker-Allowed", "/")
-	// Allow the full path to be displayed on the referrer
-	ctx.Response.Header.Set("Referrer-Policy", "unsafe-url")
 
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
@@ -102,7 +94,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	//a.log.Println(rewrite)
 	if rewrite {
 		a.log.Println("Rewriting")
 		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
