@@ -54,7 +54,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		case "Referer":
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
 		case "Sec-Fetch-Dest":
-			a.log.Println(string(v))
 			// Don't rewrite if the service worker is sending a navigate request
 			if string(v) == "empty" {
 				rewrite = false
@@ -84,14 +83,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	// Don't let any requests escape origin.
-	ctx.Response.Header.Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
-	ctx.Response.Header.Set("Cross-Origin-Embedder-Policy", "require-corp")
-	ctx.Response.Header.Set("Cross-Origin-Resource-Policy", "same-origin")
 	// Allow service worker to be registered at the root
 	ctx.Response.Header.Set("Service-Worker-Allowed", "/")
-	// Allow the full path to be displayed on the referrer
-	ctx.Response.Header.Set("Referrer-Policy", "unsafe-url")
 
 	ctx.Response.SetStatusCode(resp.StatusCode())
 

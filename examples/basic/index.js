@@ -18,7 +18,6 @@ if ('serviceWorker' in navigator) {
         registration.active.postMessage(ctx, [channel.port2]);
 
         // Reload page
-        alert('About to reload!');
         //location.reload();
     })
 } else {
