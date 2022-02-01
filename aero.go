@@ -74,10 +74,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
 		switch sk {
-		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
+		case "Alt-Svc", "Cache-Control", "Content-Length", "Cross-Origin-Resource-Policy":
 			delHeaders[sk] = string(v)
-		case "Location":
-			ctx.Response.Header.SetBytesKV(k, append([]byte(a.config.HTTP.Prefix), v...))
 		default:
 			ctx.Response.Header.SetBytesKV(k, v)
 		}
@@ -95,7 +93,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	//a.log.Println(rewrite)
 	if rewrite {
 		a.log.Println("Rewriting")
 		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {

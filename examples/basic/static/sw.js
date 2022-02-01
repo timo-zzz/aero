@@ -6,13 +6,13 @@ self.addEventListener('install', () => self.skipWaiting());
 // Use the service worker immediately instead of after reload.
 self.addEventListener('activate', event => event.waitUntil(clients.claim()));
 
-//var ctx = {};
 var ctx = {
 	http: {
 		prefix: '/http/'
 	},
 	scope: true
 }
+
 // Set the server ctx.
 self.addEventListener('message', event => {
 	console.log(event);
@@ -129,6 +129,7 @@ self.addEventListener('fetch', event => {
 					
 					// Don't set the history.
 					addEventListener('popstate', event => event.preventDefault());
+<<<<<<< HEAD
 
 					// Jail
 					open = new Proxy(open, {
@@ -204,6 +205,8 @@ self.addEventListener('fetch', event => {
 						if (typeof jail[key] === 'function')
 							// Run functions with window context; this will prevent "Illegal Invocations" errors.
 							jail[key] = jail[key].bind(window);
+=======
+>>>>>>> 7cea5be2b7c3937cf7238b13f6c662e95d7403d2
 				</script>
 				${text}
 			` : response.body, {
@@ -242,6 +245,11 @@ self.addEventListener('fetch', event => {
 				throw err;
 		}
 
+<<<<<<< HEAD
+=======
+		console.log(`%cSW%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+
+>>>>>>> 7cea5be2b7c3937cf7238b13f6c662e95d7403d2
 		// Fetch resource
 		const response = await fetch(url, {
 			body: event.request.body,
