@@ -26,12 +26,17 @@ self.url = '';
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
 		const navigate = event.request.mode === 'navigate';
-		if (navigate /*&& event.request.headers.get('Content-Type') === 'text/html'*/) {
-			const response = await fetch(event.request.url);
-
-			// Set the url
-			// TODO: Use clientId to map the current page.
+		if (
+			navigate
+			&&
+			event.request.headers.get('Content-Type').startsWith('text/html')
+			||
+			// Deprecated
+			event.request.headers.get('Content-Type').startsWith('text/x-html')
+		) {
 			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+			
+			const response = await fetch(event.request.url);
 
 			const headers = new Headers(response.headers);
 
@@ -129,7 +134,6 @@ self.addEventListener('fetch', event => {
 					
 					// Don't set the history.
 					addEventListener('popstate', event => event.preventDefault());
-<<<<<<< HEAD
 
 					// Jail
 					open = new Proxy(open, {
@@ -201,12 +205,10 @@ self.addEventListener('fetch', event => {
 						location: new URL(location.href)
 					};
 
-					for (let key of Object.values(jail)) {
+					for (let key of Object.values(jail))
 						if (typeof jail[key] === 'function')
 							// Run functions with window context; this will prevent "Illegal Invocations" errors.
 							jail[key] = jail[key].bind(window);
-=======
->>>>>>> 7cea5be2b7c3937cf7238b13f6c662e95d7403d2
 				</script>
 				${text}
 			` : response.body, {
@@ -245,11 +247,6 @@ self.addEventListener('fetch', event => {
 				throw err;
 		}
 
-<<<<<<< HEAD
-=======
-		console.log(`%cSW%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
->>>>>>> 7cea5be2b7c3937cf7238b13f6c662e95d7403d2
 		// Fetch resource
 		const response = await fetch(url, {
 			body: event.request.body,

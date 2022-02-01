@@ -70,6 +70,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+
 	delHeaders := make(map[string]string)
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
@@ -81,9 +83,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	// Allow service worker to be registered at the root
-	ctx.Response.Header.Set("Service-Worker-Allowed", "/")
-
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
 	body := resp.Body()
@@ -94,10 +93,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	}
 
 	if rewrite {
-		a.log.Println("Rewriting")
 		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
 		case "text/html", "text/x-html":
-
 			script, err := ioutil.ReadFile("index.js")
 			if err != nil {
 				fmt.Print(err)
