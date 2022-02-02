@@ -18,7 +18,8 @@ if ('serviceWorker' in navigator) {
         registration.active.postMessage(ctx, [channel.port2]);
 
         // Reload page
-        //location.reload();
+        //alert('Installed!')
+        setTimeout(() => location.reload(), 500);
     })
 } else {
     const firefox = false;

@@ -25,14 +25,9 @@ self.url = '';
 
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
-		const navigate = event.request.mode === 'navigate';
 		if (
-			navigate
-			&&
-			event.request.headers.get('Content-Type').startsWith('text/html')
-			||
-			// Deprecated
-			event.request.headers.get('Content-Type').startsWith('text/x-html')
+			event.request.mode === 'navigate'
+			//&&event.request.headers.get('Content-Type')?.startsWith('text/html')
 		) {
 			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
 			
@@ -42,18 +37,28 @@ self.addEventListener('fetch', event => {
 
 			let text = await response.text();
 
-			return new Response(event.request.destination === 'document' ? ` 
+			console.log(text);
+
+			const scriptNonce = btoa(Math.random()).slice(0, 5);
+
+			return new Response(event.request.destination === 'document' ? `
 				<!DOCTYPE html>
-				<script>
+				<head>
+					<!-- In case csp isn't set to unsafe-inline -->
+					<!--<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${scriptNonce}'"-->
+				</head>
+				<script nonce=${scriptNonce}>
 					console.log('In site!');
+
+					const ctx = ${JSON.stringify(ctx)};
 					
 					function rewriteUrl(url) {
 						if (url.startsWith('about:') || url.startsWith('data:') || url.startsWith('javascript:'))
 							return url;
 						else if (url.startsWith(location.origin)) {
-							return '${ctx.http.prefix}' + window.location.pathname.split('${ctx.http.prefix}')[1] + url;
+							return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + url;
 						} else
-							return '${ctx.http.prefix}' + url;
+							return 'ctx.http.prefix + url;
 					}
 
 					let firstScript = true;
@@ -118,6 +123,12 @@ self.addEventListener('fetch', event => {
 										console.log(\`%caction%c \${node.action} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 
 										node.action = rewrittenUrl;
+									} else if (node instanceof HTMLMetaElement && node.httpEquiv === 'refresh' && node.content) {
+										const rewrittenUrl = rewriteUrl(node.content);
+
+										console.log(\`%refresh%c \${node.content} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+
+										node.content = rewrittenUrl;
 									}
 								}
 							}
@@ -205,10 +216,11 @@ self.addEventListener('fetch', event => {
 						location: new URL(location.href)
 					};
 
-					for (let key of Object.values(jail))
+					Object.keys(jail).forEach(key => {
 						if (typeof jail[key] === 'function')
 							// Run functions with window context; this will prevent "Illegal Invocations" errors.
 							jail[key] = jail[key].bind(window);
+					});
 				</script>
 				${text}
 			` : response.body, {
@@ -220,15 +232,20 @@ self.addEventListener('fetch', event => {
 
 		// Get site url
 		var url = location.origin + ctx.http.prefix;
+		if (event.request.url.startsWith(url)) 
+			// A small hack, try going to ludicrious you can see that the fontawesome request is already rewritten?
+			url = event.request.url;
+		else {
 		const originSplit = event.request.url.split(location.origin);
 
-		//console.log(event.request.url.split(location.origin));
-		//console.log(originSplit.length);
+		console.log(event.request.url.split(location.origin));
+		console.log(originSplit.length);
 
 		if (originSplit.length === 1) {
 			url += originSplit[0];
 		} else
 			url += self.url + originSplit[1];
+		}
 
 		console.log(`%csw%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 
@@ -253,9 +270,9 @@ self.addEventListener('fetch', event => {
 			bodyUsed: event.request.bodyUsed
 		});
 
-		// Trying to fix the image error
-		if (event.request.destination === 'image') {
-			const clone =  response.clone();
+		// Easy way to handle streams
+		if (event.request.destination !== 'script') {
+			const clone = response.clone();
 			return clone;
 		}
 
