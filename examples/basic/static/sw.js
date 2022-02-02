@@ -58,7 +58,7 @@ self.addEventListener('fetch', event => {
 						else if (url.startsWith(location.origin)) {
 							return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + url;
 						} else
-							return 'ctx.http.prefix + url;
+							return ctx.http.prefix + url;
 					}
 
 					let firstScript = true;
@@ -238,8 +238,10 @@ self.addEventListener('fetch', event => {
 		else {
 		const originSplit = event.request.url.split(location.origin);
 
+		/*
 		console.log(event.request.url.split(location.origin));
 		console.log(originSplit.length);
+		*/
 
 		if (originSplit.length === 1) {
 			url += originSplit[0];
