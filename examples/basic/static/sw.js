@@ -37,8 +37,6 @@ self.addEventListener('fetch', event => {
 
 			let text = await response.text();
 
-			console.log(text);
-
 			const scriptNonce = btoa(Math.random()).slice(0, 5);
 
 			return new Response(event.request.destination === 'document' ? `
@@ -232,21 +230,20 @@ self.addEventListener('fetch', event => {
 
 		// Get site url
 		var url = location.origin + ctx.http.prefix;
-		if (event.request.url.startsWith(url)) 
-			// A small hack, try going to ludicrious you can see that the fontawesome request is already rewritten?
-			url = event.request.url;
-		else {
 		const originSplit = event.request.url.split(location.origin);
 
-		/*
-		console.log(event.request.url.split(location.origin));
-		console.log(originSplit.length);
-		*/
-
-		if (originSplit.length === 1) {
+		if (originSplit.length === 1)
 			url += originSplit[0];
-		} else
-			url += self.url + originSplit[1];
+		else {
+			const split = originSplit[1].split(ctx.http.prefix);
+			// If the url is already valid, don't do anything
+			console.log(originSplit);
+			console.log(split[1]);
+			console.log(self.url);
+			if (split.length === 2 && split[1].startsWith(self.url))
+				url += split[1];
+			else
+				url += self.url + '/' + originSplit[1].split(`${ctx.http.prefix}https://`)[1];
 		}
 
 		console.log(`%csw%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
