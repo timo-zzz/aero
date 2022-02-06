@@ -12,14 +12,11 @@ if ('serviceWorker' in navigator) {
     });
     // When service worker is ready
     navigator.serviceWorker.ready.then(registration => {
-        console.log('The service worker is active.');
-
         const channel = new MessageChannel();
         registration.active.postMessage(ctx, [channel.port2]);
 
         // Reload page
-        alert('Installed!')
-        //setTimeout(() => location.reload(), 500);
+        location.reload();
     })
 } else {
     const firefox = false;

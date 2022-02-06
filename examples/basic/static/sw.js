@@ -30,8 +30,13 @@ self.addEventListener('fetch', event => {
 			//&&event.request.headers.get('Content-Type')?.startsWith('text/html')
 		) {
 			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+
+			console.log(event.request.url);
 			
-			const response = await fetch(event.request.url);
+			const response = await fetch(event.request.url, {
+				// Don't cache
+				cache: "no-store"
+			});
 
 			const headers = new Headers(response.headers);
 
@@ -46,17 +51,20 @@ self.addEventListener('fetch', event => {
 					<!--<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${scriptNonce}'"-->
 				</head>
 				<script nonce=${scriptNonce}>
-					console.log('In site!');
-
 					const ctx = ${JSON.stringify(ctx)};
 					
 					function rewriteUrl(url) {
-						if (url.startsWith('about:') || url.startsWith('data:') || url.startsWith('javascript:'))
+						if (url.startsWith('about:') || url.startsWith('data:') || url.startsWith('javascript:') || url.startsWith('mailto:'))
 							return url;
 						else if (url.startsWith(location.origin)) {
-							return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + url;
+							const raw = url.split(location.origin)[1];
+							
+							const protocolSplit = raw.split('https://');
+							
+							return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + '/' + protocolSplit[protocolSplit.length - 1];
 						} else
 							return ctx.http.prefix + url;
+						return url;
 					}
 
 					let firstScript = true;
@@ -230,20 +238,23 @@ self.addEventListener('fetch', event => {
 
 		// Get site url
 		var url = location.origin + ctx.http.prefix;
+
 		const originSplit = event.request.url.split(location.origin);
 
 		if (originSplit.length === 1)
 			url += originSplit[0];
 		else {
-			const split = originSplit[1].split(ctx.http.prefix);
-			// If the url is already valid, don't do anything
-			console.log(originSplit);
-			console.log(split[1]);
-			console.log(self.url);
-			if (split.length === 2 && split[1].startsWith(self.url))
-				url += split[1];
-			else
-				url += self.url + '/' + originSplit[1].split(`${ctx.http.prefix}https://`)[1];
+			const prefixSplit = originSplit[1].split(ctx.http.prefix);
+
+			// If the url is already valid then don't do anything
+			if (prefixSplit.length === 2 && prefixSplit[1].startsWith(self.url)) {
+				url += prefixSplit[1];
+			}
+			else {
+				const protocolSplit = prefixSplit[prefixSplit.length - 1].split('https:/');
+				 
+				url += self.url + protocolSplit[protocolSplit.length - 1];
+			}
 		}
 
 		console.log(`%csw%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');

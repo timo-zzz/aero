@@ -1,9 +1,10 @@
 package aero
 
 import (
+	_ "embed"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
+
+	//"io/ioutil"
 	"strings"
 
 	"github.com/dgrr/http2"
@@ -11,6 +12,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
+
+//go:embed index.js
+var script string
 
 // Aero represents an instance of the Aero proxy
 type Aero struct {
@@ -54,7 +58,9 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
 		case "Sec-Fetch-Dest":
 			// Don't rewrite if the service worker is sending a navigate request
+			a.log.Println(string(v) == "empty")
 			if string(v) == "empty" {
+				a.log.Println("Not rewriting")
 				rewrite = false
 			}
 		default:
@@ -85,9 +91,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	// Allow service worker to be registered at the root
-	ctx.Response.Header.Set("Service-Worker-Allowed", "/")
-
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
 	body := resp.Body()
@@ -100,11 +103,12 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	if rewrite {
 		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
 		case "text/html", "text/x-html":
-
-			script, err := ioutil.ReadFile("index.js")
-			if err != nil {
-				fmt.Print(err)
-			}
+			/*
+				script, err := ioutil.ReadFile("index.js")
+				if err != nil {
+					fmt.Print(err)
+				}
+			*/
 
 			body = []byte(`
 				<!DOCTYPE html>
@@ -137,5 +141,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 			`)
 		}
 	}
+
 	ctx.SetBody(body)
 }
