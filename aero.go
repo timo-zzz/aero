@@ -58,9 +58,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
 		case "Sec-Fetch-Dest":
 			// Don't rewrite if the service worker is sending a navigate request
-			a.log.Println(string(v) == "empty")
 			if string(v) == "empty" {
-				a.log.Println("Not rewriting")
 				rewrite = false
 			}
 		default:
