@@ -10,7 +10,7 @@ var ctx = {
 	http: {
 		prefix: '/http/'
 	},
-	scope: true
+	scope: false
 }
 
 // Set the server ctx.
@@ -19,19 +19,66 @@ self.addEventListener('message', event => {
 	ctx = event.data;
 });
 
-self.jail = ``;
+self.jail = `
+	/*
+	WebSocket.prototype = new Proxy(window, {
+		apply(target, args) {
+			return target[...args];
+		}
+	});
+	*/
+
+	// Discord uses this
+	History.prototype.replaceState = new Proxy(History.prototype.pushState, {
+		apply(target, thisArg, args) {
+			console.log(args[2]);
+			args[2] = ctx.http.prefix + args[2];
+			target(...args);
+		}
+	})
+
+	if (Audio in window) {
+		Audio = new Proxy(Audio, {
+			construct: (target, args) => {
+				if (args[0])
+					args[0] = ctx.http.prefix + args[0];
+				return Reflect.construct(target, args);
+			},
+		});
+	};
+
+	var fakeLocation = new URL('https://example.com/');
+
+	// Variable emulation
+	// var can't be overwritten
+	var _var = vars => Object.assign(window, vars)
+
+	var jail = new Proxy(window, {
+		get(target, prop) {
+			console.log(\`%cget%c \${prop}\`, 'color: dodgerBlue', '');
+			if (prop === 'location')
+				return fakeLocation;
+			if (typeof target[prop] === 'function')
+				// Run functions with window context; this will prevent "Illegal Invocations" errors.
+				return target[prop].bind(window)
+			return target[prop];
+		},
+		set(target, prop, value) {
+			console.log(\`%cset%c \${prop}\`, 'color: dodgerBlue', '');
+			if (prop === 'location')
+				target[prop] = 'http://localhost:3000/http/' + value;
+			else
+				target[prop] = value;
+		}
+	});
+`;
 
 self.url = '';
 
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
-		if (
-			event.request.mode === 'navigate'
-			//&&event.request.headers.get('Content-Type')?.startsWith('text/html')
-		) {
+		if (event.request.mode === 'navigate') {
 			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-
-			console.log(event.request.url);
 			
 			const response = await fetch(event.request.url, {
 				// Don't cache
@@ -57,10 +104,15 @@ self.addEventListener('fetch', event => {
 						if (url.startsWith('about:') || url.startsWith('data:') || url.startsWith('javascript:') || url.startsWith('mailto:'))
 							return url;
 						else if (url.startsWith(location.origin)) {
-							const raw = url.split(location.origin)[1];
-							
-							const protocolSplit = raw.split('https://');
-							
+							const raw = window.location.pathname.split(ctx.http.prefix)[1];
+
+							const origin = new URL(raw).origin;
+							if (raw.startsWith(origin)) {
+								return ctx.http.prefix + origin + url.split(location.origin)[1].split(ctx.http.prefix)[0];
+							}
+
+							const protocolSplit = url.split(location.origin)[1].split('https://');
+
 							return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + '/' + protocolSplit[protocolSplit.length - 1];
 						} else
 							return ctx.http.prefix + url;
@@ -76,40 +128,46 @@ self.addEventListener('fetch', event => {
 								while (node = stack.pop()) {
 									if (node instanceof HTMLScriptElement) {
 										if (!firstScript) {
-											if (
-												node.src || node.text !== '',
-												// Don't rewrite data.
-												node.type !== 'application/json'
-											) {
-												const script = document.createElement('script');
+											const script = document.createElement('script');
+
+											// Copy properties to the new script
+											if (node.async)
+												script.async = node.async;
+											if (node.crossorigin)
+												script.crossorigin = node.crossorigin;
+											if (node.defer)
+												script.defer = node.defer;
+											if (node.id)
+												script.id = node.id;
+											if (node.integrity)
+												script._integrity = node.integrity;
+											if (node.nonce)
+												script.nonce = node.nonce;
+											if (node.referrerpolicy)
+												script.referrerpolicy = node.referrerpolicy;
+											if (node.src)
+												script.src = node.src;
+											if (node.type)
+												script.type = node.type;
+
 												
-												// Scope
-												if (node.text !== '') {
-													script.innerHTML = \`	
-														!function(window) {
-															\${node.text.replace(/{.*}|(let {?)/gms, (str, group) => {
-																if (group === 'let {')
-																	return 'let_.object = {';
-																else if (group === 'let ')
-																	return 'let_.';
-																else
-																	return str;
-															})}
-														}(jail);
-													\`;
-												}
-
-												// Insert rewritten script
-												node.after(script);
-
-												// Clean up old script
-												node.remove();
-
-												// Don't record this recent mutation
-												observer.takeRecords();
-
-												continue;
+											// Scope
+											if (node.text !== '' && node.type !== 'application/json') {
+												script.innerHTML = text
 											}
+
+											// Insert rewritten script
+											node.after(script);
+
+											console.log(script);
+
+											// Clean up old script
+											node.remove();
+
+											// Don't record this recent mutation
+											observer.takeRecords();
+
+											continue;
 										} else firstScript = false;
 									} else if (node instanceof HTMLIFrameElement || 'HTMLPortalElement' in window && node instanceof HTMLPortalElement && node.src) {
 										const rewrittenUrl = rewriteUrl(node.src);
@@ -152,34 +210,8 @@ self.addEventListener('fetch', event => {
 					// Don't set the history.
 					addEventListener('popstate', event => event.preventDefault());
 
-					// Jail
-					open = new Proxy(open, {
-						apply(target, thisArg, args) {
-							return Reflect.apply(...args);
-						}
-					});
-
-					// Variable emulation
-					// var can't be overwritten
-					var var_ = new Proxy({}, {
-						get(target, prop) {
-							return undefined;
-						},
-						set(target, prop, value) {
-							if (prop === 'object')
-								Object.assign(window, value);
-							else if (prop in window)
-								throw new Error('Reassignment!');
-							else
-								Object.defineProperty(window, prop, {
-									// Allow deletions
-									configurable: true,
-									value: value
-								});
-						}
-					});
 					// let can't be overwritten in strict mode
-					var let = new Proxy({}, {
+					var _let = new Proxy({}, {
 						get(target, prop) {
 							return undefined;
 						},
@@ -197,7 +229,7 @@ self.addEventListener('fetch', event => {
 						}
 					});
 					// const can't be overwritten
-					var const_ = new Proxy({}, {
+					var _const = new Proxy({}, {
 						get(target, prop) {
 							return undefined;
 						},
@@ -217,16 +249,8 @@ self.addEventListener('fetch', event => {
 						}
 					});
 
-					var jail = {
-						...window,
-						location: new URL(location.href)
-					};
-
-					Object.keys(jail).forEach(key => {
-						if (typeof jail[key] === 'function')
-							// Run functions with window context; this will prevent "Illegal Invocations" errors.
-							jail[key] = jail[key].bind(window);
-					});
+					// Jail
+					${jail}
 				</script>
 				${text}
 			` : response.body, {
@@ -257,7 +281,7 @@ self.addEventListener('fetch', event => {
 			}
 		}
 
-		console.log(`%csw%c ${event.request.url} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
 
 		// CORS testing
 		try {
@@ -288,20 +312,41 @@ self.addEventListener('fetch', event => {
 
 		let text = await response.text();
 
-		if (ctx.scope && event.request.destination === 'script') {
-			// Scope
-			text = `
-				!function(window) {
-					${text.replace(/{.*}|(let {?)/gms, (str, group) => {
-						if (group === 'let {')
-							return 'let.object = {';
-						else if (group === 'let ')
-							return 'let.';
-						else
-							return str;
-					})}
-				}(jail);
-			`
+		if (event.request.destination === 'script') {
+			if (ctx.scope) {
+				let importLines = []; 
+
+				let lines = text.split('\n');
+				for (let i in lines) {
+					if (lines[i].startsWith('import')) {
+						importLines.push(lines[i]);
+						lines[i] = '';
+					} else
+						break;
+				}
+
+				// Scope
+				text = `
+					${importLines.join('\n')}
+
+					// Jail
+					${jail}
+
+					// Cell
+					!function(window, location) {
+						${lines.join('\n').replace(/{.*}|(var|let|const) ([^;]+)(?=;)/gms, (match, p1, p2, offset, string, groups) => {
+							if (match.startsWith('{'))
+								return match;
+
+							let split = p2.split(',');
+							split.map(expression => expression.replace(/=/, ':'));
+							return `_${p1}({${split.join(',')}})`;
+						})}
+					}(jail, fakeLocation);
+				`;
+			} else {
+
+			}
 		}
 
 		let headers = new Headers(response.headers);
