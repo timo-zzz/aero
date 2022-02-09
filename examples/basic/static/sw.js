@@ -10,6 +10,9 @@ var ctx = {
 	http: {
 		prefix: '/http/'
 	},
+	ws: {
+		prefix: '/ws/'
+	},
 	scope: false
 }
 
@@ -19,67 +22,64 @@ self.addEventListener('message', event => {
 	ctx = event.data;
 });
 
-self.jail = `
-	/*
-	WebSocket.prototype = new Proxy(window, {
-		apply(target, args) {
-			return target[...args];
+self.gel = `
+	WebSocket = new Proxy(WebSocket, {
+		construct(target, args) {
+			args[0] = location.origin + ctx.ws.prefix + args[0];
+			alert(args[0]);
+			return Reflect.construct(target, args);
 		}
 	});
-	*/
-
 	// Discord uses this
-	History.prototype.replaceState = new Proxy(History.prototype.pushState, {
-		apply(target, thisArg, args) {
-			console.log(args[2]);
-			args[2] = ctx.http.prefix + args[2];
-			target(...args);
+	var historyState = {
+		apply(target, that, args) {
+			if (args[2])
+				args[2] = ${url} + args[2];
+			alert(args[2]);
+			return Reflect.apply(target, that, args);
 		}
-	})
-
-	if (Audio in window) {
-		Audio = new Proxy(Audio, {
-			construct: (target, args) => {
-				if (args[0])
-					args[0] = ctx.http.prefix + args[0];
-				return Reflect.construct(target, args);
-			},
-		});
 	};
+	History.pushState = new Proxy(History.pushState, historyState);
+	History.replaceState = new Proxy(History.pushState, historyState);
+	Audio = new Proxy(Audio, {
+		construct(target, args) {
+			if (args[0])
+				args[0] = ctx.http.prefix + args[0];
+			return Reflect.construct(target, args);
+		},
+	});
+	open = new Proxy(open, {
+		apply(target, that, args) {
+			if (args[0])
+				args[0] = ctx.http.prefix + args[2];
+			return Reflect.apply(target, that, args);
+		}
+	});
 
-	var fakeLocation = new URL('https://example.com/');
-
-	// Variable emulation
-	// var can't be overwritten
-	var _var = vars => Object.assign(window, vars)
-
-	var jail = new Proxy(window, {
+	var fakeLocation = new Proxy(location, {
 		get(target, prop) {
-			console.log(\`%cget%c \${prop}\`, 'color: dodgerBlue', '');
-			if (prop === 'location')
-				return fakeLocation;
-			if (typeof target[prop] === 'function')
-				// Run functions with window context; this will prevent "Illegal Invocations" errors.
-				return target[prop].bind(window)
-			return target[prop];
+			console.log(\`get \${prop}\`);
+			return Reflect.get(target, prop);
 		},
 		set(target, prop, value) {
-			console.log(\`%cset%c \${prop}\`, 'color: dodgerBlue', '');
-			if (prop === 'location')
-				target[prop] = 'http://localhost:3000/http/' + value;
-			else
-				target[prop] = value;
+			console.log(\`set \${prop} to \${value}\`);
+			return Reflect.set(target, that, args);
 		}
-	});
+	})
+	_location = fakeLocation
+	document._location = fakeLocation;
 `;
 
 self.url = '';
+self._url = '';
 
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
 		if (event.request.mode === 'navigate') {
 			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-			
+			// Delete this later
+			self._url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+
 			const response = await fetch(event.request.url, {
 				// Don't cache
 				cache: "no-store"
@@ -96,6 +96,7 @@ self.addEventListener('fetch', event => {
 				<head>
 					<!-- In case csp isn't set to unsafe-inline -->
 					<!--<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${scriptNonce}'"-->
+					<meta charset="utf-8">
 				</head>
 				<script nonce=${scriptNonce}>
 					const ctx = ${JSON.stringify(ctx)};
@@ -152,14 +153,11 @@ self.addEventListener('fetch', event => {
 
 												
 											// Scope
-											if (node.text !== '' && node.type !== 'application/json') {
-												script.innerHTML = text
-											}
+											if (node.text !== '' && node.type !== 'application/json')
+												script.innerHTML = node.text.replace(/location/g, '_location');
 
 											// Insert rewritten script
 											node.after(script);
-
-											console.log(script);
 
 											// Clean up old script
 											node.remove();
@@ -209,48 +207,8 @@ self.addEventListener('fetch', event => {
 					
 					// Don't set the history.
 					addEventListener('popstate', event => event.preventDefault());
-
-					// let can't be overwritten in strict mode
-					var _let = new Proxy({}, {
-						get(target, prop) {
-							return undefined;
-						},
-						set(target, prop, value) {
-							if (prop === 'object')
-								Object.assign(window, value);
-							else if (prop in window)
-								throw new Error('Reassignment!');
-							else
-								Object.defineProperty(window, prop, {
-									// Allow deletions
-									configurable: true,
-									value: value
-								});
-						}
-					});
-					// const can't be overwritten
-					var _const = new Proxy({}, {
-						get(target, prop) {
-							return undefined;
-						},
-						set(target, prop, value) {
-							if (prop === 'object')
-								Object.assign(window, value);
-							else if (prop in window)
-								throw new Error('Reassignment!');
-							else
-								Object.defineProperty(window, prop, {
-									// Allow deletions
-									configurable: true,
-									value: value,
-									// Make property immuatable
-									writable: false
-								});
-						}
-					});
-
-					// Jail
-					${jail}
+					
+					${gel}
 				</script>
 				${text}
 			` : response.body, {
@@ -298,10 +256,16 @@ self.addEventListener('fetch', event => {
 				throw err;
 		}
 
+		console.log(url);
+
 		// Fetch resource
 		const response = await fetch(url, {
 			body: event.request.body,
-			bodyUsed: event.request.bodyUsed
+			bodyUsed: event.request.bodyUsed,
+			headers: {
+				...event.request.headers,
+				_Referer: _url
+			}
 		});
 
 		// Easy way to handle streams
@@ -313,40 +277,14 @@ self.addEventListener('fetch', event => {
 		let text = await response.text();
 
 		if (event.request.destination === 'script') {
-			if (ctx.scope) {
-				let importLines = []; 
+			/*
+			text = `
+				${gel}
 
-				let lines = text.split('\n');
-				for (let i in lines) {
-					if (lines[i].startsWith('import')) {
-						importLines.push(lines[i]);
-						lines[i] = '';
-					} else
-						break;
-				}
-
-				// Scope
-				text = `
-					${importLines.join('\n')}
-
-					// Jail
-					${jail}
-
-					// Cell
-					!function(window, location) {
-						${lines.join('\n').replace(/{.*}|(var|let|const) ([^;]+)(?=;)/gms, (match, p1, p2, offset, string, groups) => {
-							if (match.startsWith('{'))
-								return match;
-
-							let split = p2.split(',');
-							split.map(expression => expression.replace(/=/, ':'));
-							return `_${p1}({${split.join(',')}})`;
-						})}
-					}(jail, fakeLocation);
-				`;
-			} else {
-
-			}
+				${text.replace(/location/g, '_location')}
+			`;
+			*/
+			text = text.replace(/location/g, '_location');
 		}
 
 		let headers = new Headers(response.headers);

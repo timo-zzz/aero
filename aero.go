@@ -7,6 +7,7 @@ import (
 	//"io/ioutil"
 	"strings"
 
+	"github.com/dgrr/fastws"
 	"github.com/dgrr/http2"
 	"github.com/fasthttp/router"
 	"github.com/sirupsen/logrus"
@@ -29,8 +30,51 @@ func New(log *logrus.Logger, client *fasthttp.Client, config Config) (*Aero, err
 
 	r := router.New()
 	r.GET(config.HTTP.Prefix+"{filepath:*}", a.http)
-	r.ServeFiles("/{filepath:*}", config.HTTP.Static)
 	// Websocket support
+	r.GET(config.WS.Prefix+"{filepath:*}", func(ctx *fasthttp.RequestCtx) {
+		uri := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.WS.Prefix)
+
+		fastws.Upgrade(func(conn *fastws.Conn) {
+			a.log.Printf("Opened connection\n")
+
+			clientConn, err := fastws.Dial(uri)
+			if err != nil {
+				a.log.Fatalln(err)
+			}
+
+			var msg []byte
+			for {
+				_, msg, err = conn.ReadMessage(msg[:0])
+				if err != nil {
+					if err != fastws.EOF {
+					}
+					break
+				}
+
+				_, err = clientConn.Write(msg)
+				if err != nil {
+					break
+				}
+			}
+
+			var clientMsg []byte
+			for {
+				_, clientMsg, err = clientConn.ReadMessage(msg[:0])
+				if err != nil {
+					break
+				}
+				a.log.Printf("Server: %s\n", msg)
+
+				_, err = conn.Write(clientConn)
+				if err != nil {
+					break
+				}
+			}
+
+			a.log.Printf("Closed connection\n")
+		})(ctx)
+	})
+	r.ServeFiles("/{filepath:*}", config.HTTP.Static)
 
 	srv := &fasthttp.Server{Handler: r.Handler}
 	if config.SSL.Enabled {
@@ -44,18 +88,23 @@ func New(log *logrus.Logger, client *fasthttp.Client, config Config) (*Aero, err
 func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	uri := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.HTTP.Prefix)
 
+	a.log.Println(uri)
+
 	req := &fasthttp.Request{}
 	req.SetRequestURI(uri)
 
 	rewrite := true
 	ctx.Request.Header.VisitAll(func(k, v []byte) {
 		switch string(k) {
-		case "Accept-Encoding", "Cache-Control", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker", "X-Forwarded-For", "X-Forwarded-Host":
+		case "Accept-Encoding", "Cache-Control", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker":
 			// Do nothing, so these headers aren't added
 		case "Host":
 			req.Header.SetBytesKV(k, req.Host())
 		case "Referer":
+			// Do this and post requests for discord and google would work
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
+		case "_referer":
+			req.Header.Set("Referer", string(v))
 		case "Sec-Fetch-Dest":
 			// Don't rewrite if the service worker is sending a navigate request
 			if string(v) == "empty" {
@@ -65,6 +114,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 			req.Header.SetBytesKV(k, v)
 		}
 	})
+
+	a.log.Println(req.Header.String())
 
 	var resp fasthttp.Response
 	err := a.client.Do(req, &resp)
@@ -101,13 +152,6 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	if rewrite {
 		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
 		case "text/html", "text/x-html":
-			/*
-				script, err := ioutil.ReadFile("index.js")
-				if err != nil {
-					fmt.Print(err)
-				}
-			*/
-
 			body = []byte(`
 				<!DOCTYPE html>
 				<html>
@@ -141,4 +185,32 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	}
 
 	ctx.SetBody(body)
+}
+
+var upgrader = websocket.FastHTTPUpgrader{}
+
+func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
+	err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
+		defer ws.Close()
+		for {
+			mt, message, err := ws.ReadMessage()
+			if err != nil {
+				a.log.Println("read:", err)
+				break
+			}
+			a.log.Printf("recv: %s", message)
+			err = ws.WriteMessage(mt, message)
+			if err != nil {
+				a.log.Println("write:", err)
+				break
+			}
+		}
+	})
+
+	if err != nil {
+		if _, ok := err.(websocket.HandshakeError); ok {
+			a.log.Println(err)
+		}
+		return
+	}
 }
