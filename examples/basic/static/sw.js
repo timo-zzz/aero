@@ -22,25 +22,29 @@ self.addEventListener('message', event => {
 	ctx = event.data;
 });
 
+// Oh no I will have to fix prefetch
+
+self.origin = '';
 self.gel = `
 	WebSocket = new Proxy(WebSocket, {
 		construct(target, args) {
-			args[0] = location.origin + ctx.ws.prefix + args[0];
+			const protocol = args[0].split('://')[0] + '://';
+			args[0] = 'ws://' + location.host + ctx.ws.prefix + args[0];
 			alert(args[0]);
 			return Reflect.construct(target, args);
 		}
 	});
 	// Discord uses this
 	var historyState = {
-		apply(target, that, args) {
+		apply (target, that, args) {
 			if (args[2])
-				args[2] = ${url} + args[2];
+				args[2] = ctx.origin + args[2];
 			alert(args[2]);
 			return Reflect.apply(target, that, args);
 		}
 	};
-	History.pushState = new Proxy(History.pushState, historyState);
-	History.replaceState = new Proxy(History.pushState, historyState);
+	History.pushState = new Proxy(history.pushState, historyState);
+	History.replaceState = new Proxy(history.pushState, historyState);
 	Audio = new Proxy(Audio, {
 		construct(target, args) {
 			if (args[0])
@@ -70,15 +74,10 @@ self.gel = `
 	document._location = fakeLocation;
 `;
 
-self.url = '';
-self._url = '';
-
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
 		if (event.request.mode === 'navigate') {
-			self.url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-			// Delete this later
-			self._url = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+			origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
 
 			const response = await fetch(event.request.url, {
 				// Don't cache
@@ -100,6 +99,7 @@ self.addEventListener('fetch', event => {
 				</head>
 				<script nonce=${scriptNonce}>
 					const ctx = ${JSON.stringify(ctx)};
+					ctx.origin = '${origin}';
 					
 					function rewriteUrl(url) {
 						if (url.startsWith('about:') || url.startsWith('data:') || url.startsWith('javascript:') || url.startsWith('mailto:'))
@@ -151,7 +151,6 @@ self.addEventListener('fetch', event => {
 											if (node.type)
 												script.type = node.type;
 
-												
 											// Scope
 											if (node.text !== '' && node.type !== 'application/json')
 												script.innerHTML = node.text.replace(/location/g, '_location');
@@ -210,7 +209,7 @@ self.addEventListener('fetch', event => {
 					
 					${gel}
 				</script>
-				${text}
+				${text} 
 			` : response.body, {
 				status: response.status,
 				statusText: response.statusText,
@@ -218,30 +217,34 @@ self.addEventListener('fetch', event => {
 			});
 		}
 
-		// Get site url
-		var url = location.origin + ctx.http.prefix;
+		if (event.request.url.startsWith('data:')) {
+			var url = event.request.url;
+		} else {
+			var url = location.origin + ctx.http.prefix;
 
-		const originSplit = event.request.url.split(location.origin);
+			const originSplit = event.request.url.split(location.origin);
 
-		if (originSplit.length === 1)
-			url += originSplit[0];
-		else {
-			const prefixSplit = originSplit[1].split(ctx.http.prefix);
-
-			// If the url is already valid then don't do anything
-			if (prefixSplit.length === 2 && prefixSplit[1].startsWith(self.url)) {
-				url += prefixSplit[1];
-			}
+			if (originSplit.length === 1)
+				url += originSplit[0];
 			else {
-				const protocolSplit = prefixSplit[prefixSplit.length - 1].split('https:/');
-				 
-				url += self.url + protocolSplit[protocolSplit.length - 1];
+				const prefixSplit = originSplit[1].split(ctx.http.prefix);
+
+				// If the url is already valid then don't do anything
+				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url)) {
+					url += prefixSplit[1];
+				}
+				else {
+					const protocolSplit = prefixSplit[prefixSplit.length - 1].split('https:/');
+					
+					url += origin + protocolSplit[protocolSplit.length - 1];
+				}
 			}
 		}
 
 		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
 
 		// CORS testing
+		/*
 		try {
 			const controller = new AbortController();
 			const signal = controller.signal;
@@ -255,8 +258,7 @@ self.addEventListener('fetch', event => {
 				// Report CORS error
 				throw err;
 		}
-
-		console.log(url);
+		*/
 
 		// Fetch resource
 		const response = await fetch(url, {
@@ -264,7 +266,7 @@ self.addEventListener('fetch', event => {
 			bodyUsed: event.request.bodyUsed,
 			headers: {
 				...event.request.headers,
-				_Referer: _url
+				_Referer: origin
 			}
 		});
 

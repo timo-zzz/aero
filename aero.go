@@ -4,12 +4,11 @@ import (
 	_ "embed"
 	"encoding/json"
 
-	//"io/ioutil"
 	"strings"
 
+	"github.com/buaazp/fasthttprouter"
 	"github.com/dgrr/fastws"
 	"github.com/dgrr/http2"
-	"github.com/fasthttp/router"
 	"github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
@@ -28,53 +27,11 @@ type Aero struct {
 func New(log *logrus.Logger, client *fasthttp.Client, config Config) (*Aero, error) {
 	a := &Aero{log: log, client: client, config: config}
 
-	r := router.New()
-	r.GET(config.HTTP.Prefix+"{filepath:*}", a.http)
+	r := fasthttprouter.New()
+	r.GET(config.HTTP.Prefix+"*filepath", a.http)
 	// Websocket support
-	r.GET(config.WS.Prefix+"{filepath:*}", func(ctx *fasthttp.RequestCtx) {
-		uri := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.WS.Prefix)
-
-		fastws.Upgrade(func(conn *fastws.Conn) {
-			a.log.Printf("Opened connection\n")
-
-			clientConn, err := fastws.Dial(uri)
-			if err != nil {
-				a.log.Fatalln(err)
-			}
-
-			var msg []byte
-			for {
-				_, msg, err = conn.ReadMessage(msg[:0])
-				if err != nil {
-					if err != fastws.EOF {
-					}
-					break
-				}
-
-				_, err = clientConn.Write(msg)
-				if err != nil {
-					break
-				}
-			}
-
-			var clientMsg []byte
-			for {
-				_, clientMsg, err = clientConn.ReadMessage(msg[:0])
-				if err != nil {
-					break
-				}
-				a.log.Printf("Server: %s\n", msg)
-
-				_, err = conn.Write(clientConn)
-				if err != nil {
-					break
-				}
-			}
-
-			a.log.Printf("Closed connection\n")
-		})(ctx)
-	})
-	r.ServeFiles("/{filepath:*}", config.HTTP.Static)
+	r.GET(config.WS.Prefix+"*filepath", a.ws)
+	r.NotFound = fasthttp.FSHandler("./static", 0)
 
 	srv := &fasthttp.Server{Handler: r.Handler}
 	if config.SSL.Enabled {
@@ -86,12 +43,12 @@ func New(log *logrus.Logger, client *fasthttp.Client, config Config) (*Aero, err
 
 // http handles the HTTP proxy requests.
 func (a *Aero) http(ctx *fasthttp.RequestCtx) {
-	uri := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.HTTP.Prefix)
+	url := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.HTTP.Prefix)
 
-	a.log.Println(uri)
+	//a.log.Println(url)
 
 	req := &fasthttp.Request{}
-	req.SetRequestURI(uri)
+	req.SetRequestURI(url)
 
 	rewrite := true
 	ctx.Request.Header.VisitAll(func(k, v []byte) {
@@ -115,7 +72,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	a.log.Println(req.Header.String())
+	//a.log.Println(req.Header.String())
 
 	var resp fasthttp.Response
 	err := a.client.Do(req, &resp)
@@ -173,7 +130,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 								ws: {
 									prefix: '` + a.config.WS.Prefix + `'
 								},
-								url: '` + uri + `'
+								url: '` + url + `'
 							};
 
 							` + string(script) + `
@@ -187,30 +144,40 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	ctx.SetBody(body)
 }
 
-var upgrader = websocket.FastHTTPUpgrader{}
-
 func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
-	err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
-		defer ws.Close()
-		for {
-			mt, message, err := ws.ReadMessage()
-			if err != nil {
-				a.log.Println("read:", err)
-				break
-			}
-			a.log.Printf("recv: %s", message)
-			err = ws.WriteMessage(mt, message)
-			if err != nil {
-				a.log.Println("write:", err)
-				break
-			}
-		}
-	})
+	url := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.WS.Prefix)
 
-	if err != nil {
-		if _, ok := err.(websocket.HandshakeError); ok {
-			a.log.Println(err)
+	fastws.Upgrade(func(conn *fastws.Conn) {
+		a.log.Println(url)
+
+		defer conn.Close()
+
+		var msg []byte
+		var err error
+
+		cConn, err := fastws.Dial(url)
+		if err != nil {
+			a.log.Fatalln(err)
 		}
-		return
-	}
+
+		for {
+			_, msg, err = conn.ReadMessage(msg[:0])
+			if err != nil {
+				break
+			}
+			a.log.Printf("Server: %s\n", msg)
+			cConn.Write(msg)
+		}
+
+		for {
+			_, cMsg, err := cConn.ReadMessage(msg[:0])
+			if err != nil {
+				break
+			}
+			a.log.Printf("Client: %s\n", msg)
+			conn.Write(cMsg)
+		}
+
+		cConn.Close()
+	})(ctx)
 }
