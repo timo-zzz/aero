@@ -41,9 +41,11 @@ self.gel = `
 	});
 	WebSocket = new Proxy(WebSocket, {
 		construct(target, args) {
+			/*
 			const protocol = args[0].split('://')[0] + '://';
 			args[0] = 'ws://' + location.host + ctx.ws.prefix + args[0];
 			alert(args[0]);
+			*/
 			return Reflect.construct(target, args);
 		}
 	});
@@ -55,7 +57,11 @@ self.gel = `
 	});
 	// Discord uses this
 	var historyState = {
+		get(target, prop) {
+			console.log(prop);
+		},
 		apply(target, that, args) {
+			console.log('history accessed');
 			if (args[2])
 				args[2] = ctx.origin + args[2];
 			alert(args[2]);
@@ -81,9 +87,9 @@ self.gel = `
 	var fakeLocation = new Proxy(location, {
 		get(target, prop) {
 			console.log(prop);	
-			console.log(ctx.origin);
-			console.log(new URL(ctx.origin)[prop]);
-			if (typeof target[prop] === 'function') {
+			//console.log(ctx.origin);
+			//console.log(new URL(ctx.origin)[prop]);
+			if (typeof target[prop] === 'function' && false) {
 				return {
 					assign: () => null
 				}[prop];
@@ -97,6 +103,8 @@ self.gel = `
 	_location = fakeLocation
 	document._location = fakeLocation;
 `;
+
+self.origin = '';
 
 self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
@@ -121,7 +129,7 @@ self.addEventListener('fetch', event => {
 					<!--<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${scriptNonce}'"-->
 					<meta charset="utf-8">
 					<script nonce=${scriptNonce}>
-						const ctx = ${JSON.stringify(ctx)};
+						var ctx = ${JSON.stringify(ctx)};
 						ctx.origin = '${origin}';
 						
 						function rewriteUrl(url) {
@@ -143,7 +151,8 @@ self.addEventListener('fetch', event => {
 							return url;
 						}
 
-						let firstScript = true;
+						// normally would be true
+						let firstScript = false;
 						new MutationObserver((mutations, observer) => {
 							//console.log(mutations);	
 							for (let mutation of mutations)
@@ -179,6 +188,9 @@ self.addEventListener('fetch', event => {
 												if (node.text !== '' && node.type !== 'application/json')
 													script.innerHTML = node.text.replace(/location/g, '_location');
 
+												//console.log(node);
+												//console.log(script);
+
 												// Insert rewritten script
 												node.after(script);
 
@@ -190,12 +202,14 @@ self.addEventListener('fetch', event => {
 
 												continue;
 											} else firstScript = false;
-										} else if ((node instanceof HTMLIFrameElement || 'HTMLPortalElement' in window && node instanceof HTMLPortalElement) && node.src) {
+										} else if ((node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement) && node.src) {
 											const rewrittenUrl = rewriteUrl(node.src);
 
 											console.log(\`%csrc%c \${node.src} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 
-											node.href = rewrittenUrl;
+											node.src = rewrittenUrl;
+
+											console.log(node);
 										} else if (node.href && !(node instanceof HTMLLinkElement)) {
 											const rewrittenUrl = rewriteUrl(node.href);
 											
@@ -254,18 +268,37 @@ self.addEventListener('fetch', event => {
 			else {
 				const prefixSplit = originSplit[1].split(ctx.http.prefix);
 
-				//console.log(prefixSplit);
+				console.log(prefixSplit);
 
 				// If the url is already valid then don't do anything
 				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url)) {
 					url += prefixSplit[1];
 				}
 				else {
-					const protocolSplit = prefixSplit[prefixSplit.length - 1].split('https:/');
-					
-					var path = protocolSplit[protocolSplit.length - 1].split('/' + new URL(origin).hostname)[1];
+					console.log(origin);
 
-					url += origin + path;
+					var prefix = prefixSplit[prefixSplit.length - 1];
+
+					console.log(prefix);
+					
+					const protocolSplit = prefix.startsWith('https:/') ? prefix.split('https:/') : prefix.split('http:/');
+
+					console.log(protocolSplit);
+
+					let pathSplit = protocolSplit[protocolSplit.length - 1].split('/' + new URL(origin).hostname);
+					let path = pathSplit[pathSplit.length - 1];
+
+					console.log(path);
+
+					let dotSplit = path.split('/')[1].split('.');
+
+					console.log(dotSplit);
+
+					// If another origin
+					if (dotSplit.length === 2 && protocolSplit.length === 3)
+						url += 'https:/' + path;
+					else
+						url += origin + path;
 				}
 			}
 		}
@@ -301,6 +334,7 @@ self.addEventListener('fetch', event => {
 			mode: event.request.mode
 		});
 
+		
 		// Easy way to handle streams
 		if (event.request.destination !== 'script') {
 			const clone = response.clone();
@@ -309,10 +343,11 @@ self.addEventListener('fetch', event => {
 
 		let text = await response.text();
 
-		if (event.request.destination === 'script') {
+		if (event.request.destination === 'script')
 			text = text.replace(/location/g, '_location');
-		}
 
+		//console.log(text);
+		
 		let headers = new Headers(response.headers);
 
 		headers.delete('Content-Length');

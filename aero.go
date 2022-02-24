@@ -43,9 +43,14 @@ func New(log *logrus.Logger, client *fasthttp.Client, config Config) (*Aero, err
 
 // http handles the HTTP proxy requests.
 func (a *Aero) http(ctx *fasthttp.RequestCtx) {
-	url := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.HTTP.Prefix)
+	var query = ""
+	var queryString = string(ctx.URI().QueryString())
+	if queryString != "" {
+		query = "?" + string(ctx.URI().QueryString())
+	}
+	url := strings.TrimPrefix(string(ctx.URI().PathOriginal())+query, a.config.HTTP.Prefix)
 
-	//a.log.Println(url)
+	a.log.Println(url)
 
 	req := &fasthttp.Request{}
 	req.SetRequestURI(url)
