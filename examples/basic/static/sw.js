@@ -19,18 +19,20 @@ var ctx = {
 // Set the server ctx.
 //self.addEventListener('message', event => ctx = event.data);
 
-// Oh no I will have to fix prefetch
-
 self.origin = '';
 self.gel = `
+	/*
 	Object.defineProperty(document, 'cookie', {
 		get() {
 			//return document.cookie;
 		},
 		set(value) {
-			document.cookie = value;
+			// causes infinite recursion
+			//document.cookie = value;
+			console.log(value);
 		}
 	});
+	*/
 	Object.defineProperty(document, 'domain', {
 		get() {
 		  	return new URL(ctx.origin).hostname;
@@ -118,16 +120,15 @@ self.addEventListener('fetch', event => {
 
 			const headers = new Headers(response.headers);
 
-			let text = await response.text();
-
 			const scriptNonce = btoa(Math.random()).slice(0, 5);
+
+			let text = await response.text();
 
 			return new Response(event.request.destination === 'document' ? `
 				<!DOCTYPE html>
+				<body>
+				</body>
 				<head>
-					<!-- In case csp isn't set to unsafe-inline -->
-					<!--<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${scriptNonce}'"-->
-					<meta charset="utf-8">
 					<script nonce=${scriptNonce}>
 						var ctx = ${JSON.stringify(ctx)};
 						ctx.origin = '${origin}';
@@ -151,6 +152,10 @@ self.addEventListener('fetch', event => {
 							return url;
 						}
 
+						function cloneElement() {
+
+						}
+
 						// normally would be true
 						let firstScript = false;
 						new MutationObserver((mutations, observer) => {
@@ -160,57 +165,7 @@ self.addEventListener('fetch', event => {
 									let stack = [node];
 
 									while (node = stack.pop()) {
-										if (node instanceof HTMLScriptElement) {
-											if (!firstScript) {
-												const script = document.createElement('script');
-
-												// Copy properties to the new script
-												if (node.async)
-													script.async = node.async;
-												if (node.crossorigin)
-													script.crossorigin = node.crossorigin;
-												if (node.defer)
-													script.defer = node.defer;
-												if (node.id)
-													script.id = node.id;
-												if (node.integrity)
-													script._integrity = node.integrity;
-												if (node.nonce)
-													script.nonce = node.nonce;
-												if (node.referrerpolicy)
-													script.referrerpolicy = node.referrerpolicy;
-												if (node.src)
-													script.src = node.src;
-												if (node.type)
-													script.type = node.type;
-
-												// Scope
-												if (node.text !== '' && node.type !== 'application/json')
-													script.innerHTML = node.text.replace(/location/g, '_location');
-
-												//console.log(node);
-												//console.log(script);
-
-												// Insert rewritten script
-												node.after(script);
-
-												// Clean up old script
-												node.remove();
-
-												// Don't record this recent mutation
-												observer.takeRecords();
-
-												continue;
-											} else firstScript = false;
-										} else if ((node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement) && node.src) {
-											const rewrittenUrl = rewriteUrl(node.src);
-
-											console.log(\`%csrc%c \${node.src} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-											node.src = rewrittenUrl;
-
-											console.log(node);
-										} else if (node.href && !(node instanceof HTMLLinkElement)) {
+										if (node.href && !(node instanceof HTMLLinkElement)) {
 											const rewrittenUrl = rewriteUrl(node.href);
 											
 											console.log(\`%chref%c \${node.href} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
@@ -222,13 +177,84 @@ self.addEventListener('fetch', event => {
 											console.log(\`%caction%c \${node.action} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 
 											node.action = rewrittenUrl;
-										} else if (node instanceof HTMLMetaElement && node.httpEquiv === 'refresh' && node.content) {
-											const rewrittenUrl = rewriteUrl(node.content);
-
-											console.log(\`%refresh%c \${node.content} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
-
-											node.content = rewrittenUrl;
 										}
+										/*
+											if (node instanceof HTMLScriptElement) {
+												if (!firstScript) {
+													const script = document.createElement('script');
+
+													// Copy properties to the new script
+													if (node.async)
+														script.async = node.async;
+													if (node.crossorigin)
+														script.crossorigin = node.crossorigin;
+													if (node.defer)
+														script.defer = node.defer;
+													if (node.id)
+														script.id = node.id;
+													if (node.integrity)
+														script._integrity = node.integrity;
+													if (node.nonce)
+														script.nonce = node.nonce;
+													if (node.referrerpolicy)
+														script.referrerpolicy = node.referrerpolicy;
+													if (node.src)
+														script.src = node.src;
+													if (node.type)
+														script.type = node.type;
+
+													// Scope
+													if (node.text !== '' && node.type !== 'application/json')
+														script.innerHTML = node.text.replace(/location/g, '_location');
+
+													console.log(node);
+													//console.log(script);
+
+													// Insert rewritten script
+													node.after(script);
+
+													// Clean up old script
+													node.remove();
+
+													// Don't record this recent mutation
+													observer.takeRecords();
+
+													continue;
+												} else firstScript = false;
+											} else if ((node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement) && node.src) {
+												const rewrittenUrl = rewriteUrl(node.src);
+
+												console.log(\`%csrc%c \${node.src} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+
+												node.src = rewrittenUrl;
+
+												console.log(node);
+											} else if (node instanceof HTMLMetaElement && node.httpEquiv === 'refresh' && node.content) {
+												const rewrittenUrl = rewriteUrl(node.content);
+
+												console.log(\`%refresh%c \${node.content} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+
+												node.content = rewrittenUrl;
+											} else if (node instanceof HTMLLinkElement && node.integrity && node.href) {
+												console.log(node);
+
+												const link = document.createElement('link');
+
+												if (node.rel)
+													link.rel = node.rel;
+												
+												link.href = node.href
+
+												// Insert rewritten link
+												node.after(link);
+
+												// Clean up old link
+												node.remove();
+
+												// Don't record this recent mutation
+												observer.takeRecords();
+											}
+										*/
 									}
 								}
 						}).observe(document, {
@@ -247,8 +273,12 @@ self.addEventListener('fetch', event => {
 						
 						${gel}
 					</script>
+					${
+						text
+							.replace(/<meta[^>]+>/gms, '')
+							.replace(/integrity/g, '_integrity')
+					}
 				</head>
-				${text} 
 			` : response.body, {
 				status: response.status,
 				statusText: response.statusText,
@@ -268,31 +298,31 @@ self.addEventListener('fetch', event => {
 			else {
 				const prefixSplit = originSplit[1].split(ctx.http.prefix);
 
-				console.log(prefixSplit);
+				//console.log(prefixSplit);
 
 				// If the url is already valid then don't do anything
 				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url)) {
 					url += prefixSplit[1];
 				}
 				else {
-					console.log(origin);
+					//console.log(origin);
 
 					var prefix = prefixSplit[prefixSplit.length - 1];
 
-					console.log(prefix);
+					//console.log(prefix);
 					
 					const protocolSplit = prefix.startsWith('https:/') ? prefix.split('https:/') : prefix.split('http:/');
 
-					console.log(protocolSplit);
+					//console.log(protocolSplit);
 
 					let pathSplit = protocolSplit[protocolSplit.length - 1].split('/' + new URL(origin).hostname);
 					let path = pathSplit[pathSplit.length - 1];
 
-					console.log(path);
+					//console.log(path);
 
 					let dotSplit = path.split('/')[1].split('.');
 
-					console.log(dotSplit);
+					//console.log(dotSplit);
 
 					// If another origin
 					if (dotSplit.length === 2 && protocolSplit.length === 3)
@@ -343,6 +373,7 @@ self.addEventListener('fetch', event => {
 
 		let text = await response.text();
 
+		// I will have another option for aero jail
 		if (event.request.destination === 'script')
 			text = text.replace(/location/g, '_location');
 
