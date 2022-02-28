@@ -116,6 +116,16 @@ self.gel = `
 	})
 	_location = fakeLocation
 	document._location = fakeLocation;
+	['innerHTML','outerHTML'].forEach(prop => {
+	  Object.defineProperty(window.Element.prototype, prop, {
+	    get() {
+	      return this.getAttribute(prop).toString().replace(/_integrity/g, 'integrity').replace(/_location/g, 'location');
+	    },
+	    set() {
+	      return this.getAttribute(prop).toString().replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/g, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '');
+	    }
+	  });
+	});
 `;
 
 self.origin = '';
