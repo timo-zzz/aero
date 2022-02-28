@@ -24,6 +24,7 @@ self.gel = `
 	/*
 	Object.defineProperty(document, 'cookie', {
 		get() {
+			console.log('cookie get');
 			//return document.cookie;
 		},
 		set(value) {
@@ -39,6 +40,16 @@ self.gel = `
 		},
 		set(value) {
 		  	//return value;
+		}
+	});
+	postMessage = new Proxy(postMessage, {
+		apply(target, that, args) {
+			if (args[1]) {
+				console.log('yes args 1');
+				args[1] = ctx.origin
+			}
+			console.log(args);
+			return Reflect.apply(target, that, args);
 		}
 	});
 	WebSocket = new Proxy(WebSocket, {
@@ -66,12 +77,13 @@ self.gel = `
 			console.log('history accessed');
 			if (args[2])
 				args[2] = ctx.origin + args[2];
+			alert(ctx.origin);
 			alert(args[2]);
 			return Reflect.apply(target, that, args);
 		}
 	};
-	History.pushState = new Proxy(history.pushState, historyState);
-	History.replaceState = new Proxy(history.pushState, historyState);
+	history.pushState = new Proxy(history.pushState, historyState);
+	history.replaceState = new Proxy(history.pushState, historyState);
 	Audio = new Proxy(Audio, {
 		construct(target, args) {
 			if (args[0])
@@ -88,7 +100,7 @@ self.gel = `
 	});
 	var fakeLocation = new Proxy(location, {
 		get(target, prop) {
-			console.log(prop);	
+			//console.log(prop);	
 			//console.log(ctx.origin);
 			//console.log(new URL(ctx.origin)[prop]);
 			if (typeof target[prop] === 'function' && false) {
@@ -112,8 +124,6 @@ self.addEventListener('fetch', event => {
 	event.respondWith(async function() {
 		if (event.request.mode === 'navigate') { 	
 			origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-
-			console.log(event.request.url.split(location.origin + ctx.http.prefix)[1]);
 
 			const response = await fetch(event.request.url, {
 				// Don't cache
@@ -168,7 +178,7 @@ self.addEventListener('fetch', event => {
 										if (node.href && !(node instanceof HTMLLinkElement)) {
 											const rewrittenUrl = rewriteUrl(node.href);
 											
-											console.log(\`%chref%c \${node.href} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
+											//console.log(\`%chref%c \${node.href} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 											
 											node.href = rewrittenUrl;	
 										} else if (node.action) {
@@ -206,6 +216,9 @@ self.addEventListener('fetch', event => {
 						text
 							.replace(/<meta[^>]+>/gms, '')
 							.replace(/integrity/g, '_integrity')
+							.replace(/location/gms, '_location')
+							.replace(/rel=["']?preload["']?/g, '')
+							.replace(/rel=["']?preconnect["']?/g, '')
 					}
 				</head>
 			` : response.body, {
@@ -228,11 +241,10 @@ self.addEventListener('fetch', event => {
 				const prefixSplit = originSplit[1].split(ctx.http.prefix);
 
 				// If the url is already valid then don't do anything
-				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url)) {
+				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url))
 					url += prefixSplit[1];
-				}
 				else {
-					//console.log(origin);
+					console.log(origin);
 
 					var prefix = prefixSplit[prefixSplit.length - 1];
 					
@@ -283,7 +295,12 @@ self.addEventListener('fetch', event => {
 			mode: event.request.mode
 		});
 
-		
+		/*
+		if (event.request.destination === 'image')
+			return fetch('https://c.tenor.com/j6HNDMU_fF4AAAAM/cow-dancing.gif');	
+		//return fetch('https://i.kym-cdn.com/entries/icons/original/000/034/421/cover1.jpg');
+		*/
+
 		// Easy way to handle streams
 		if (event.request.destination !== 'script') {
 			const clone = response.clone();
@@ -294,7 +311,7 @@ self.addEventListener('fetch', event => {
 
 		// I will have another option for aero jail
 		if (event.request.destination === 'script')
-			text = text.replace(/location/g, '_location');
+			text = text.replace(/location/gms, '_location');
 		
 		let headers = new Headers(response.headers);
 

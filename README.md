@@ -1,6 +1,5 @@
 # Aero
 A interception based web proxy.
-⚠️ Do **not** add aero to your site.
 
 [![Heroku](https://raw.githubusercontent.com/FogNetwork/Tsunami/main/deploy/heroku2.svg)](https://heroku.com/deploy?template=https://github.com/titaniumnetwork-dev/aero)
 [![Replit](https://raw.githubusercontent.com/FogNetwork/Tsunami/main/deploy/replit2.svg)](https://repl.it/github/titaniumnetwork-dev/aero)
