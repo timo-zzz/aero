@@ -8,3 +8,6 @@ A interception based web proxy.
 ## Basic Example
 You can find a basic example of Aero [here](https://github.com/titaniumnetwork-dev/aero/tree/master/examples/basic)
  
+## Deploy on VPS
+cd examples/basic
+go build
