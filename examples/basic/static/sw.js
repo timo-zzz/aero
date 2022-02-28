@@ -45,7 +45,6 @@ self.gel = `
 	postMessage = new Proxy(postMessage, {
 		apply(target, that, args) {
 			if (args[1]) {
-				console.log('yes args 1');
 				args[1] = ctx.origin
 			}
 			console.log(args);
@@ -68,17 +67,16 @@ self.gel = `
 		  //return Reflect.construct(target, args);
 		}
 	});
-	// Discord uses this
 	var historyState = {
 		get(target, prop) {
 			console.log(prop);
 		},
 		apply(target, that, args) {
-			console.log('history accessed');
 			if (args[2])
-				args[2] = ctx.origin + args[2];
-			alert(ctx.origin);
-			alert(args[2]);
+				args[2] = ctx.http.prefix + args[2];
+				//args[2] = location.href + args[2];
+			console.log(location);
+			args[2] = location.pathname;
 			return Reflect.apply(target, that, args);
 		}
 	};
@@ -151,16 +149,18 @@ self.addEventListener('fetch', event => {
 
 			const headers = new Headers(response.headers);
 
-			const scriptNonce = btoa(Math.random()).slice(0, 5);
-
 			let text = await response.text();
+
+			function generateNonce() {
+				return btoa(Math.random()).slice(0, 5);
+			}
 
 			return new Response(event.request.destination === 'document' ? `
 				<!DOCTYPE html>
 				<body>
 				</body>
 				<head>
-					<script nonce=${scriptNonce}>
+					<script nonce=${generateNonce()}>
 						var ctx = ${JSON.stringify(ctx)};
 						ctx.origin = '${origin}';
 						
@@ -181,10 +181,6 @@ self.addEventListener('fetch', event => {
 							} else
 								return ctx.http.prefix + url;
 							return url;
-						}
-
-						function cloneElement() {
-
 						}
 
 						new MutationObserver((mutations, observer) => {
@@ -211,7 +207,8 @@ self.addEventListener('fetch', event => {
 
 											console.log(\`%csrc%c \${node.src} %c->%c \${rewrittenUrl}\`, 'color: dodgerBlue', '', 'color: mediumPurple', '');
 
-											node.src = rewrittenUrl;
+											// The problem is that it changes the origin, to fix this it would need to directly access window object
+											//node.src = rewrittenUrl;
 										}
 									}
 								}
@@ -220,14 +217,11 @@ self.addEventListener('fetch', event => {
 							subtree: true
 						});
 						
-						// Update the url hash.
-						//addEventListener('hashchange', event => ctx.origin = location.hash);
-						
 						// Clear history.
-						history.replaceState({}, '');
+						//history.replaceState({}, '');
 						
 						// Don't set the history.
-						addEventListener('popstate', event => event.preventDefault());
+						//addEventListener('popstate', event => event.preventDefault());
 						
 						${gel}
 					</script>
@@ -238,6 +232,7 @@ self.addEventListener('fetch', event => {
 							.replace(/location/gms, '_location')
 							.replace(/rel=["']?preload["']?/g, '')
 							.replace(/rel=["']?preconnect["']?/g, '')
+							.replace(/rel=["']?prefetch["']?/g, '')
 					}
 				</head>
 			` : response.body, {
@@ -263,7 +258,7 @@ self.addEventListener('fetch', event => {
 				if (prefixSplit.length === 2 && prefixSplit[1].startsWith(url))
 					url += prefixSplit[1];
 				else {
-					console.log(origin);
+					//console.log(origin);
 
 					var prefix = prefixSplit[prefixSplit.length - 1];
 					
@@ -282,8 +277,6 @@ self.addEventListener('fetch', event => {
 				}
 			}
 		}
-
-		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
 
 		// CORS testing
 		/*
@@ -314,16 +307,21 @@ self.addEventListener('fetch', event => {
 			mode: event.request.mode
 		});
 
-		/*
-		if (event.request.destination === 'image')
-			return fetch('https://c.tenor.com/j6HNDMU_fF4AAAAM/cow-dancing.gif');	
-		//return fetch('https://i.kym-cdn.com/entries/icons/original/000/034/421/cover1.jpg');
-		*/
+		
+		let delHeaders = ['content-length', 'cross-origin-opener-policy-report-only', 'cross-origin-opener-policy', 'report-to', 'vary', 'x-content-type-options'];
+		
+		var headers = Object.fromEntries([...response.headers].filter(([header]) => delHeaders.indexOf(header) === -1));
+
+		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
+
+		console.log(headers);
 
 		// Easy way to handle streams
 		if (event.request.destination !== 'script') {
-			const clone = response.clone();
-			return clone;
+			return new Response(response.body, {
+				headers: headers,
+				statusText: response.statusText
+			});
 		}
 
 		let text = await response.text();
@@ -331,10 +329,6 @@ self.addEventListener('fetch', event => {
 		// I will have another option for aero jail
 		if (event.request.destination === 'script')
 			text = text.replace(/location/gms, '_location');
-		
-		let headers = new Headers(response.headers);
-
-		headers.delete('Content-Length');
 
 		return new Response(text, {
 			status: response.status,

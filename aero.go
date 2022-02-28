@@ -96,11 +96,14 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
 			delHeaders[sk] = string(v)
 		case "Location":
-			ctx.Response.Header.SetBytesKV(k, append([]byte(a.config.HTTP.Prefix), v...))
+			a.log.Println("Location:" + string(v))
+			ctx.Response.Header.SetBytesK(k, a.config.HTTP.Prefix+string(v))
 		default:
 			ctx.Response.Header.SetBytesKV(k, v)
 		}
 	})
+
+	a.log.Println(ctx.Response.Header.String())
 
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
