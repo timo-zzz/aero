@@ -7,11 +7,7 @@ An interception-based web proxy. Only prerelease builds are available.
  
 ## Deploy
 cd examples/basic
-<<<<<<< HEAD
-go build
-=======
 go build
 
 ## Basic Example
 You can find a basic example of Aero [here](https://github.com/titaniumnetwork-dev/aero/tree/master/examples/basic)
->>>>>>> 15227fc20aa638e22178d144d915b01948fc5510
