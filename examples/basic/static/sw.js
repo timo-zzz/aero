@@ -23,8 +23,7 @@ function filterHeaders(headers) {
 }
 
 self.addEventListener('fetch', event => {
-	event.respondWith(async function() {
-		const response = await fetch(url, {
+	const response = await fetch(url, {
 			body: event.request.body,
 			bodyUsed: event.request.bodyUsed,
 			headers: {
@@ -35,12 +34,14 @@ self.addEventListener('fetch', event => {
 			mode: event.request.mode,
 			// Don't cache
 			cache: "no-store"
-		});
-
-		if (event.request.mode === 'navigate') { 	
-			ctx.origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-		
-			let text = await response.text();
+	});
+	let text = await response.text();
+	
+	origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+	
+	event.respondWith(async function() {
+		if (event.request.mode === 'navigate') { 
+			ctx.origin = origin;
 
 			return new Response(event.request.destination === 'document' ? `
 				<!DOCTYPE html>
@@ -110,16 +111,6 @@ self.addEventListener('fetch', event => {
 
 		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
 
-		if (event.request.destination !== 'script') {
-			return new Response(response.body, {
-				headers: filterHeaders(headers),
-				statusText: response.statusText
-			});
-		}
-
-		let text = await response.text();
-
-		// I will have another option for aero jail
 		if (event.request.destination === 'script')
 			text = text.replace(/location/gms, '_location');
 
