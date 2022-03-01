@@ -40,10 +40,10 @@ self.addEventListener('fetch', event => {
 	origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
 	
 	event.respondWith(async function() {
-		if (event.request.mode === 'navigate') { 
+		if (event.request.mode === 'navigate' && event.request.destination === 'document') { 
 			ctx.origin = origin;
 
-			return new Response(event.request.destination === 'document' ? `
+			return new Response(`
 				<!DOCTYPE html>
 				<head>
 					<script id=ctx type="application/json">${JSON.stringify(ctx)}</script>
@@ -51,8 +51,8 @@ self.addEventListener('fetch', event => {
 					<script src=aero/gel.js>
 					${text.replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/gms, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
 				</head>
-			` : response.body, {
-				statusText: response.statusText,
+			`, {
+				status: response.status,
 				headers: filterHeaders(headers)
 			});
 		}
@@ -116,8 +116,7 @@ self.addEventListener('fetch', event => {
 
 		return new Response(text, {
 			status: response.status,
-			statusText: response.statusText,
-			headers: headers
+			headers: filterHeaders(headers)
 		});
 	}());
 });
