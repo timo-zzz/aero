@@ -23,39 +23,9 @@ function filterHeaders(headers) {
 }
 
 self.addEventListener('fetch', event => {
-	const response = await fetch(url, {
-			body: event.request.body,
-			bodyUsed: event.request.bodyUsed,
-			headers: {
-				...event.request.headers,
-				_Referer: origin
-			},
-			method: event.request.method,
-			mode: event.request.mode,
-			// Don't cache
-			cache: "no-store"
-	});
-	let text = await response.text();
-	
-	origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
-	
 	event.respondWith(async function() {
-		if (event.request.mode === 'navigate' && event.request.destination === 'document') { 
-			ctx.origin = origin;
-
-			return new Response(`
-				<!DOCTYPE html>
-				<head>
-					<script id=ctx type="application/json">${JSON.stringify(ctx)}</script>
-					<script src=aero/inject.js type=module>
-					<script src=aero/gel.js>
-					${text.replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/gms, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
-				</head>
-			`, {
-				status: response.status,
-				headers: filterHeaders(headers)
-			});
-		}
+		const origin = new URL(event.request.url.split(location.origin + ctx.http.prefix)[1]).origin;
+		ctx.origin = origin;
 
 		const originSplit = event.request.url.split(location.origin);
 
@@ -77,7 +47,7 @@ self.addEventListener('fetch', event => {
 					url += prefixSplit[1];
 				else {
 					const prefix = prefixSplit[prefixSplit.length - 1];
-					
+
 					const protocolSplit = prefix.startsWith('https:/') ? prefix.split('https:/') : prefix.split('http:/');
 
 					const pathSplit = protocolSplit[protocolSplit.length - 1].split('/' + new URL(origin).hostname);
@@ -99,7 +69,9 @@ self.addEventListener('fetch', event => {
 			const controller = new AbortController();
 			const signal = controller.signal;
 
-			await fetch(url, { signal });
+			await fetch(url, {
+				signal
+			});
 
 			// Don't actually send the request.
 			controller.abort()
@@ -109,14 +81,35 @@ self.addEventListener('fetch', event => {
 				throw err;
 		}
 
+		const response = await fetch(url, {
+			body: event.request.body,
+			bodyUsed: event.request.bodyUsed,
+			headers: {
+				...event.request.headers,
+				_Referer: origin
+			},
+			method: event.request.method,
+			mode: event.request.mode,
+			// Don't cache
+			cache: "no-store"
+		});
+
 		console.log(`%csw%c ${event.request.url} %c${event.request.destination} %c->%c ${url}`, 'color: dodgerBlue', '', 'color: yellow', 'color: mediumPurple', '');
 
-		if (event.request.destination === 'script')
-			text = text.replace(/location/gms, '_location');
-
-		return new Response(text, {
-			status: response.status,
-			headers: filterHeaders(headers)
-		});
+		return new Response(
+			event.request.mode === 'navigate' && event.request.destination === 'document' 
+				? `
+					<!DOCTYPE html>
+					<script id=ctx type="application/json">${JSON.stringify(ctx)}</script>
+					<script src=aero/inject.js type=module>
+					<script src=aero/gel.js>
+					${await response.text().replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/gms, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
+				` : event.request.destination === 'script' 
+					? await response.text().replace(/location/gms, '_location') 
+					: await response.body()
+			, {
+				status: response.status,
+				headers: filterHeaders(headers)
+			});
 	}());
 });
