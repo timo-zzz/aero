@@ -5,9 +5,8 @@ function rewriteUrl(url) {
 		const raw = window.location.pathname.split(ctx.http.prefix)[1];
 		const origin = new URL(raw).origin;
 
-		if (raw.startsWith(origin)) {
+		if (raw.startsWith(origin))
 			return ctx.http.prefix + origin + url.split(location.origin)[1].split(ctx.http.prefix)[0];
-		}
 
 		const protocolSplit = url.split(location.origin)[1].split('https://');
 

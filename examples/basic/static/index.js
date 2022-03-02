@@ -40,3 +40,15 @@ window.addEventListener('load', () => {
 			});
 	});
 });
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', {
+        // The Service-Worker-Allowed must be set to '/'
+        scope: prefix,
+        // Don't cache http requests.
+        updateViaCache: 'none'
+    }).then(registration => {
+        // Update service worker
+        registration.update();
+    });
+}
