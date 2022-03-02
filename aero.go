@@ -2,7 +2,6 @@ package aero
 
 import (
 	_ "embed"
-	"encoding/json"
 
 	"strings"
 
@@ -12,9 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 )
-
-//go:embed index.js
-var script string
 
 // Aero represents an instance of the Aero proxy
 type Aero struct {
@@ -55,10 +51,9 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	req := &fasthttp.Request{}
 	req.SetRequestURI(url)
 
-	rewrite := true
 	ctx.Request.Header.VisitAll(func(k, v []byte) {
 		switch string(k) {
-		case "Accept-Encoding", "Cache-Control", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker":
+		case "Accept-Encoding", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker":
 			// Do nothing, so these headers aren't added
 		case "Host":
 			req.Header.SetBytesKV(k, req.Host())
@@ -67,17 +62,12 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 			//req.Header.SetBytesKV(k, ctx.Request.Header.Peek("_referrer"))
 		case "_referer":
 			req.Header.Set("Referer", string(v))
-		case "Sec-Fetch-Dest":
-			// Don't rewrite if the service worker is sending a navigate request
-			if string(v) == "empty" {
-				rewrite = false
-			}
 		default:
 			req.Header.SetBytesKV(k, v)
 		}
 	})
 
-	//a.log.Println(req.Header.String())
+	a.log.Println(req.Header.String())
 
 	var resp fasthttp.Response
 	err := a.client.Do(req, &resp)
@@ -93,8 +83,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
 		switch sk {
-		case "Access-Control-Allow-Origin", "Alt-Svc", "Cache-Control", "Content-Encoding", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Permissions-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
-			//case "Content-Security-Policy":
+		case "Alt-Svc", "Cache-Control", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
 			delHeaders[sk] = string(v)
 		case "Location":
 			a.log.Println("Location:" + string(v))
@@ -110,48 +99,8 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
 	body := resp.Body()
-	cors, err := json.Marshal(delHeaders)
-	if err != nil {
-		a.log.Errorln(err)
-		return
-	}
 
-	if rewrite {
-		switch strings.Split(string(resp.Header.Peek("Content-Type")), ";")[0] {
-		case "text/html", "text/x-html":
-			body = []byte(`
-				<!DOCTYPE html>
-				<html>
-					<head>
-						<meta charset=utf-8>
-
-						<!--Reset favicon-->
-						<link href=data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII= rel="icon" type="image/x-icon"/>
-					</head>
-					<body>
-						<script type=module>
-							'use strict';
-
-							const ctx = {
-								cors: ` + string(cors) + `,
-								http: {
-									prefix: '` + a.config.HTTP.Prefix + `'
-								},
-								ws: {
-									prefix: '` + a.config.WS.Prefix + `'
-								},
-								url: '` + url + `'
-							};
-
-							` + string(script) + `
-						</script>
-					</body>
-				</html>
-			`)
-		}
-	}
-
-	ctx.SetBody(body)
+	ctx.Response.SetBodyRaw(body)
 }
 
 func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
@@ -173,6 +122,7 @@ func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
 		for {
 			_, msg, err = conn.ReadMessage(msg[:0])
 			if err != nil {
+				a.log.Printf("Server message end")
 				break
 			}
 			a.log.Printf("Server: %s\n", msg)
@@ -182,9 +132,10 @@ func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
 		for {
 			_, cMsg, err := cConn.ReadMessage(msg[:0])
 			if err != nil {
+				a.log.Printf("Client message end", msg)
 				break
 			}
-			a.log.Printf("Client: %s\n", msg)
+			a.log.Printf("Client: %s\n", cMsg)
 			conn.Write(cMsg)
 		}
 
