@@ -1,3 +1,5 @@
+const ctx = JSON.parse(document.getElementsByTagName("script")[0].innerHTML);
+
 function wrap() {
 	
 }
@@ -12,10 +14,10 @@ Audio = new Proxy(Audio, {
 
 Object.defineProperty(document, 'cookie', {
 	get() {
-		return document.cookie;
+		//return document.cookie;
 	},
 	set(value) {
-		document.cookie = value;
+		//document.cookie = value;
 	}
 });
 Object.defineProperty(document, 'domain', {
@@ -32,6 +34,8 @@ var historyState = {
 		console.log(prop);
 	},
 	apply(target, that, args) {
+		console.log(args);
+		args[2] = ctx.origin + args[2];
 		return Reflect.apply(target, that, args);
 	}
 };
@@ -52,6 +56,8 @@ var fakeLocation = new Proxy(location, {
 })
 _location = fakeLocation
 document._location = fakeLocation;
+
+/*
 ['innerHTML','outerHTML'].forEach(prop => {
   Object.defineProperty(window.Element.prototype, prop, {
     get() {
@@ -62,6 +68,7 @@ document._location = fakeLocation;
     }
   });
 });
+*/
 
 open = new Proxy(open, {
 	apply(target, that, args) {
@@ -85,6 +92,7 @@ WebSocket = new Proxy(WebSocket, {
 	construct(target, args) {
 		const protocol = args[0].split('://')[0] + '://';
 		args[0] = 'ws://' + location.host + ctx.ws.prefix + args[0];
+		console.log(args[0]);
 		return Reflect.construct(target, args);
 	}
 });

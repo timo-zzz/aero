@@ -14,7 +14,6 @@ function rewriteUrl(url) {
 		return ctx.http.prefix + window.location.pathname.split(ctx.http.prefix)[1] + '/' + protocolSplit[protocolSplit.length - 1];
 	} else
 		return ctx.http.prefix + url;
-	return url;
 }
 
 new MutationObserver((mutations, observer) => {
