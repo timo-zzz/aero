@@ -16,7 +16,7 @@ var ctx = {
 	codec: 'plain'
 }
 
-let delHeaders = ['cache-control', 'content-security-policy', 'content-length', 'cross-origin-opener-policy-report-only', 'cross-origin-opener-policy', 'report-to', 'strict-transport-security', 'x-frame-options', 'x-content-type-options'];
+let delHeaders = ['cache-control', 'content-security-policy', 'content-length', 'content-encoding', 'cross-origin-opener-policy-report-only', 'cross-origin-opener-policy', 'report-to', 'strict-transport-security', 'x-frame-options', 'x-content-type-options'];
 function filterHeaders(headers) {
 	return Object.fromEntries([...headers].filter(([header]) => delHeaders.indexOf(header) === -1));
 }
@@ -139,15 +139,14 @@ self.addEventListener('fetch', event => {
 				${text.replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/gms, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
 			`; 
 		} else if (event.request.destination === 'script') {
-			//text = await response.text();
-			//text = text.replace(/location/gms, '_location')
-			text = await response.blob();
+			text = await response.text();
+			text = text.replace(/location/gms, '_location')
 		} else {
-			text = await response.blob();
+			text = response.body;
 		}
 
 		return new Response(text, {
-			//status: response.status,
+			status: response.status,
 			headers: filterHeaders(response.headers)
 		});
 	}());
