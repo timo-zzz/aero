@@ -41,10 +41,8 @@ self.addEventListener('fetch', event => {
 				type: "window"
 			}).then(function(clients) {
 				for (var client of clients)
-					if (client.id === event.clientId) {
+					if (client.id === event.clientId)
 						clientUrl = client.url;
-						console.log(clientUrl);
-					}
 			});
 
 			var origin = new URL(clientUrl.split(location.origin + ctx.http.prefix)[1]).origin;
@@ -130,23 +128,24 @@ self.addEventListener('fetch', event => {
 			text = await response.text();
 			text = `
 				<!DOCTYPE html>
+				<meta charset="utf-8">
 				<!--Reset favicon-->
 				<link href=data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII= rel="icon" type="image/x-icon"/>
 				<script id=ctx type="application/json">${JSON.stringify(ctx)}</script>
 				<!-- When content types are served correctly on the backend type=module will be added-->
 				<script src=/aero/inject.js></script>
 				<script src=/aero/gel.js></script>
-				${text.replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/gms, '_location').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
+				${text.replace(/<meta[^>]+>/g, '').replace(/integrity/g, '_integrity').replace(/location/g, '_location').replace(/nonce/g, '_nonce').replace(/rel=["']?preload["']?/g, '').replace(/rel=["']?preconnect["']?/g, '').replace(/rel=["']?prefetch["']?/g, '')}
 			`; 
 		} else if (event.request.destination === 'script') {
 			text = await response.text();
-			text = text.replace(/location/gms, '_location')
+			text = text.replace(/location/g, '_location')
 		} else {
 			text = response.body;
 		}
 
 		return new Response(text, {
-			status: response.status,
+			//status: response.status,
 			headers: filterHeaders(response.headers)
 		});
 	}());
