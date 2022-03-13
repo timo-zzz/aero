@@ -1,66 +1,32 @@
-@import "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap";
-* {
-  font-family: Roboto;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inconsolata&display=swap');
+
 body {
-  margin: 0;
-  background: #111;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+    overflow-x: hidden;
+    background-color: #2e3440
 }
-.logo-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  margin-top: 13%;
+
+.omnibox {
+    width: 100%;
+    font-family: 'montserrat alternates', sans-serif;
+    padding: 2em;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
 }
-.logo {
-  width: 150px;
+
+.omnibox h1 {
+  color: white;
+  font-size: 5em;
+  margin: 0.5em;
 }
-.logo-wrapper .text {
-  font-size: 75px;
-  font-family: roboto;
-  color: #fff;
-}
-footer {
-  margin-top: auto;
-  width: 93%;
-  align-self: center;
-  height: 80px;
-  display: flex;
-  justify-content: left;
-  align-items: center;
-}
-footer a,
-footer span {
-  margin: 0 15px;
-  text-decoration: none;
-  color: #fff;
-  font-size: 15px;
-}
-footer a {
-  cursor: pointer;
-}
-footer a:hover {
-  text-decoration: underline;
-}
-form {
-  display: flex;
-  justify-content: center;
-}
-form input {
-  background: 0 0;
-  font-family: inherit;
-  padding: 0 17px;
-  height: 48px;
-  border: 1px solid rgb(255, 255, 255, 0.2);
-  color: var(--text-color);
-  border-radius: 3px;
-  outline: none;
-  width: 350px;
-  margin-top: 5px;
-  border-radius: 50px;
-  color: #fff;
+
+.omnibox input {
+  font-family: 'montserrat alternates', sans-serif;
+  font-size: 1em;
+  padding: .7rem;
+  border-style: none;
+  background-color: #3b4252;
+  color: white;
 }

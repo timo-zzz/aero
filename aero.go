@@ -46,14 +46,14 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	}
 	url := strings.TrimPrefix(string(ctx.URI().PathOriginal())+query, a.config.HTTP.Prefix)
 
-	a.log.Println(url)
+	//a.log.Println(url)
 
 	req := &fasthttp.Request{}
 	req.SetRequestURI(url)
 
 	ctx.Request.Header.VisitAll(func(k, v []byte) {
 		switch string(k) {
-		case "Accept-Encoding", "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker":
+		case "Sec-Gpc", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Service-Worker":
 			// Do nothing, so these headers aren't added
 		case "Host":
 			req.Header.SetBytesKV(k, req.Host())
@@ -67,7 +67,7 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 		}
 	})
 
-	a.log.Println(req.Header.String())
+	//a.log.Println(req.Header.String())
 
 	var resp fasthttp.Response
 	err := a.client.Do(req, &resp)
@@ -83,62 +83,83 @@ func (a *Aero) http(ctx *fasthttp.RequestCtx) {
 	resp.Header.VisitAll(func(k, v []byte) {
 		sk := string(k)
 		switch sk {
-		case "Alt-Svc", "Cache-Control", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Referrer-Policy", "Set-Cookie", "Set-Cookie2", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
+		case "Alt-Svc", "Cache-Control", "Content-Length", "Content-Security-Policy", "Cross-Origin-Resource-Policy", "Referrer-Policy", "Service-Worker-Allowed", "Strict-Transport-Security", "Timing-Allow-Origin", "X-Frame-Options", "X-Xss-Protection":
 			delHeaders[sk] = string(v)
 		case "Location":
 			a.log.Println("Location:" + string(v))
 			ctx.Response.Header.SetBytesK(k, a.config.HTTP.Prefix+string(v))
-			ctx.Response.Header.SetBytesKV(k, []byte("https://localhost:3000"+a.config.HTTP.Prefix+string(v)))
+			ctx.Response.Header.SetBytesKV(k, []byte("http://localhost:3000"+a.config.HTTP.Prefix+string(v)))
 		default:
 			ctx.Response.Header.SetBytesKV(k, v)
 		}
 	})
 
-	a.log.Println(ctx.Response.Header.String())
+	//a.log.Println(ctx.Response.Header.String())
 
 	ctx.Response.SetStatusCode(resp.StatusCode())
 
 	body := resp.Body()
 
-	ctx.Response.SetBodyRaw(body)
+	ctx.Response.SetBody(body)
 }
 
 func (a *Aero) ws(ctx *fasthttp.RequestCtx) {
-	url := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.WS.Prefix)
+	var query = ""
+	var queryString = string(ctx.URI().QueryString())
+	if queryString != "" {
+		query = "?" + string(ctx.URI().QueryString())
+	}
+	url := strings.TrimPrefix(string(ctx.URI().PathOriginal()), a.config.WS.Prefix) + query
+
+	a.log.Println(url)
 
 	fastws.Upgrade(func(conn *fastws.Conn) {
-		a.log.Println(url)
-
-		defer conn.Close()
-
 		var msg []byte
 		var err error
 
-		cConn, err := fastws.Dial(url)
+		req := fasthttp.AcquireRequest()
+		req.Header.DisableNormalizing()
+
+		ctx.Request.Header.VisitAll(func(k, v []byte) {
+			switch string(k) {
+			case "Host":
+				req.Header.AddBytesK(k, "remote-auth-gateway.discord.gg")
+			case "Origin":
+				req.Header.AddBytesK(k, "https://discord.com")
+			default:
+				req.Header.AddBytesKV(k, v)
+			}
+		})
+
+		a.log.Println(req.Header.String())
+
+		peer, err := fastws.DialWithHeaders(url, req)
 		if err != nil {
+			a.log.Println(peer)
 			a.log.Fatalln(err)
 		}
 
 		for {
-			_, msg, err = conn.ReadMessage(msg[:0])
+			a.log.Println(peer)
+			_, msg, err = peer.ReadMessage(nil)
 			if err != nil {
 				a.log.Printf("Server message end")
 				break
 			}
 			a.log.Printf("Server: %s\n", msg)
-			cConn.Write(msg)
+			conn.Write(msg)
 		}
 
 		for {
-			_, cMsg, err := cConn.ReadMessage(msg[:0])
+			_, pMsg, err := conn.ReadMessage(nil)
 			if err != nil {
 				a.log.Printf("Client message end", msg)
 				break
 			}
-			a.log.Printf("Client: %s\n", cMsg)
-			conn.Write(cMsg)
+			a.log.Printf("Client: %s\n", pMsg)
+			peer.Write(pMsg)
 		}
 
-		cConn.Close()
+		peer.Close()
 	})(ctx)
 }
