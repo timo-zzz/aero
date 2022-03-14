@@ -3,7 +3,6 @@ function allowOrigin(url) {
         const controller = new AbortController();
         const signal = controller.signal;
 
-        // This needs to be the actual url without /http/
         await fetch(url, {
             signal
         });

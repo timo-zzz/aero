@@ -11,7 +11,7 @@ async function handle(event) {
 		body: event.request.body,
 		headers: {
 			...event.request.headers,
-			_Referer: origin
+			_referer: origin
 		},
 		method: event.request.method,
 		// Don't cache
@@ -33,7 +33,6 @@ async function handle(event) {
 				<script src=/aero/scope.js type=module></script>
 				<script src=/aero/dom.js></script>
 				<script src=/aero/window.js></script>
-				<script src=/aero/gel.js></script>
 
 				${rewriteDoc(text)}
 			`;
@@ -41,7 +40,7 @@ async function handle(event) {
 		text = scope(await response.text());
 	else if (event.request.destination === 'serviceworker')
 		text = `
-			importScripts('./swGel');
+			importScripts('./gel.js');
 
 			${text}
 		`;
