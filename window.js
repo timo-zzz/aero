@@ -1,5 +1,5 @@
 import { rewriteHTML } from './html.js';
-import { scope } from '../scope.js';
+import { scope } from './scope.js';
 
 const ctx = JSON.parse(document.getElementsByTagName("script")[0].innerHTML);
 
@@ -9,7 +9,7 @@ function wrap(url) {
 	return ctx.http.prefix + url;
 }
 
-audio = new Proxy(audio, {
+Audio = new Proxy(Audio, {
 	construct(target, args) {
 		[url] = args[0];
 
@@ -82,13 +82,12 @@ const locationProxy = new Proxy({}, {
 			location[prop] = ctx.http.prefix + fakeLocation.origin + value;
 	}
 })
-$location = locationProxy;
 document.location = locationProxy;
 
 Node.prototype.textContent = new Proxy(Node.prototype.textContent, {
     set(target, prop, value) {
         if (Node.tagname === 'SCRIPT')
-            value = rewrite(value);
+            value = scope(value);
 
         return Reflect.set(...arguments);
     }
@@ -121,7 +120,6 @@ WebSocket = new Proxy(WebSocket, {
 	construct(target, args) {
 		[url] = args;
 
-		const protocol = url.split('://')[0] + '://';
 		url = 'ws://' + location.host + ctx.ws.prefix + url;
 
 		return Reflect.construct(target, [url]);
